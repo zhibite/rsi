@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RSI 马丁策略 - 登录</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
+    .card { background: rgba(30,41,59,0.9); border: 1px solid rgba(99,102,241,0.2); }
+    .tab-active { border-bottom: 2px solid #6366f1; color: #6366f1; }
+    input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 1px #6366f1; }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+  <div class="card rounded-2xl p-8 w-full max-w-md shadow-2xl">
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <div class="text-4xl mb-2">📈</div>
+      <h1 class="text-2xl font-bold text-white">RSI 马丁量化交易</h1>
+      <p class="text-slate-400 text-sm mt-1">OKX 自动化策略交易平台</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex border-b border-slate-700 mb-6">
+      <button id="tab-login" onclick="switchTab('login')"
+        class="tab-active flex-1 py-2 text-sm font-medium transition-all">登录</button>
+      <button id="tab-register" onclick="switchTab('register')"
+        class="flex-1 py-2 text-sm font-medium text-slate-400 transition-all">注册</button>
+    </div>
+
+    <!-- Login Form -->
+    <form id="login-form" onsubmit="doLogin(event)" class="space-y-4">
+      <div>
+        <label class="text-slate-300 text-sm block mb-1">用户名</label>
+        <input id="login-username" type="text" required placeholder="请输入用户名"
+          class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2.5 text-white text-sm transition-all" />
+      </div>
+      <div>
+        <label class="text-slate-300 text-sm block mb-1">密码</label>
+        <input id="login-password" type="password" required placeholder="请输入密码"
+          class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2.5 text-white text-sm transition-all" />
+      </div>
+      <p id="login-error" class="text-red-400 text-sm hidden"></p>
+      <button type="submit"
+        class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-lg transition-all text-sm">
+        登录
+      </button>
+    </form>
+
+    <!-- Register Form -->
+    <form id="register-form" onsubmit="doRegister(event)" class="space-y-4 hidden">
+      <div>
+        <label class="text-slate-300 text-sm block mb-1">用户名</label>
+        <input id="reg-username" type="text" required placeholder="3-50个字符"
+          class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2.5 text-white text-sm transition-all" />
+      </div>
+      <div>
+        <label class="text-slate-300 text-sm block mb-1">邮箱</label>
+        <input id="reg-email" type="email" required placeholder="your@email.com"
+          class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2.5 text-white text-sm transition-all" />
+      </div>
+      <div>
+        <label class="text-slate-300 text-sm block mb-1">密码</label>
+        <input id="reg-password" type="password" required placeholder="至少8位"
+          class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2.5 text-white text-sm transition-all" />
+      </div>
+      <p id="reg-error" class="text-red-400 text-sm hidden"></p>
+      <p id="reg-success" class="text-green-400 text-sm hidden"></p>
+      <button type="submit"
+        class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-lg transition-all text-sm">
+        注册账号
+      </button>
+    </form>
+  </div>
+
+  <script>
+    // Redirect if already logged in
+    if (localStorage.getItem('token')) {
+      window.location.href = '/';
+    }
+
+    function switchTab(tab) {
+      const tabs = ['login', 'register'];
+      tabs.forEach(t => {
+        document.getElementById(`tab-${t}`).className =
+          t === tab
+            ? 'tab-active flex-1 py-2 text-sm font-medium transition-all'
+            : 'flex-1 py-2 text-sm font-medium text-slate-400 transition-all';
+        document.getElementById(`${t}-form`).classList.toggle('hidden', t !== tab);
+      });
+    }
+
+    async function doLogin(e) {
+      e.preventDefault();
+      const errEl = document.getElementById('login-error');
+      errEl.classList.add('hidden');
+      const username = document.getElementById('login-username').value;
+      const password = document.getElementById('login-password').value;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '登录失败');
+        const token = data.access_token;
+        if (!token || typeof token !== 'string') throw new Error('登录响应无效，请重试');
+        localStorage.setItem('token', token);
+        window.location.href = '/';
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    async function doRegister(e) {
+      e.preventDefault();
+      const errEl = document.getElementById('reg-error');
+      const okEl = document.getElementById('reg-success');
+      errEl.classList.add('hidden');
+      okEl.classList.add('hidden');
+      const username = document.getElementById('reg-username').value;
+      const email = document.getElementById('reg-email').value;
+      const password = document.getElementById('reg-password').value;
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '注册失败');
+        okEl.textContent = '注册成功！请登录';
+        okEl.classList.remove('hidden');
+        setTimeout(() => switchTab('login'), 1500);
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      }
+    }
+  </script>
+</body>
+</html>

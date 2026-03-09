@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RSI 马丁策略 - RSI 扫描仪</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #0f172a; color: #e2e8f0; }
+    .sidebar { background: #1e293b; border-right: 1px solid #334155; }
+    .nav-item { transition: all 0.15s; }
+    .nav-item:hover, .nav-item.active { background: rgba(99,102,241,0.15); color: #818cf8; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
+    .rsi-bar { height: 5px; border-radius: 3px; background: #334155; }
+    .rsi-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+    .filter-btn { border: 1px solid #334155; border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; transition: all 0.15s; color: #94a3b8; background: transparent; }
+    .filter-btn.active { background: rgba(99,102,241,0.2); border-color: #6366f1; color: #818cf8; }
+    .sort-btn { border: 1px solid #334155; border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; transition: all 0.15s; color: #94a3b8; background: transparent; }
+    .sort-btn.active { background: rgba(99,102,241,0.15); border-color: #6366f1; color: #818cf8; }
+    .stat-chip { border-radius: 8px; padding: 6px 14px; font-size: 11px; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+  </style>
+</head>
+<body class="flex min-h-screen">
+
+<!-- Sidebar -->
+<aside class="sidebar w-56 flex-shrink-0 flex flex-col py-6 px-3 fixed h-full z-10">
+  <div class="px-3 mb-8">
+    <div class="text-lg font-bold text-white flex items-center gap-2">
+      <span class="text-2xl">📈</span> RSI 马丁
+    </div>
+    <div class="text-xs text-slate-500 mt-0.5">量化交易平台</div>
+  </div>
+  <nav class="flex-1 space-y-1">
+    <a href="/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
+      <span>🏠</span> 仪表板
+    </a>
+    <a href="/rsi-scanner.html" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium">
+      <span>🔍</span> RSI 扫描
+    </a>
+    <a href="/trades.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
+      <span>📋</span> 交易记录
+    </a>
+    <a href="/stats.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
+      <span>📊</span> 盈利统计
+    </a>
+    <a href="/backtest.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
+      <span>🧪</span> 历史回测
+    </a>
+    <a href="/settings.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
+      <span>⚙️</span> 配置
+    </a>
+  </nav>
+  <div class="px-3 pt-4 border-t border-slate-700">
+    <div id="user-info" class="text-xs text-slate-500 mb-3"></div>
+    <button onclick="logout()" class="text-xs text-slate-500 hover:text-red-400 transition-colors">退出登录</button>
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="ml-56 flex-1 p-6 overflow-auto">
+  <div class="max-w-6xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-5">
+      <div>
+        <h1 class="text-xl font-semibold text-white">RSI 扫描仪</h1>
+        <p id="scanner-subtitle" class="text-xs text-slate-500 mt-1">实时监控 RSI(14) · 1 分钟 K 线 · 每 2 秒刷新</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="conn-status" class="text-xs px-2.5 py-1 rounded-full font-medium bg-yellow-500/15 text-yellow-400">连接中...</span>
+        <span id="last-updated" class="text-xs text-slate-500"></span>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="flex flex-wrap gap-3 mb-4">
+      <div class="stat-chip bg-red-500/10 text-red-400">
+        超卖 <span id="cnt-oversold" class="font-bold ml-1">0</span>
+      </div>
+      <div class="stat-chip bg-orange-500/10 text-orange-400">
+        近超卖 <span id="cnt-near-oversold" class="font-bold ml-1">0</span>
+      </div>
+      <div class="stat-chip bg-slate-500/20 text-slate-400">
+        中性 <span id="cnt-neutral" class="font-bold ml-1">0</span>
+      </div>
+      <div class="stat-chip bg-blue-500/10 text-blue-400">
+        近超买 <span id="cnt-near-overbought" class="font-bold ml-1">0</span>
+      </div>
+      <div class="stat-chip bg-green-500/10 text-green-400">
+        超买 <span id="cnt-overbought" class="font-bold ml-1">0</span>
+      </div>
+      <div class="stat-chip bg-indigo-500/10 text-indigo-400 ml-auto">
+        就绪 <span id="cnt-ready" class="font-bold ml-1">0</span> 个交易对
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="flex flex-wrap items-center gap-3 mb-4">
+      <!-- Filter -->
+      <div class="flex items-center gap-1.5">
+        <span class="text-xs text-slate-500">筛选:</span>
+        <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">全部</button>
+        <button class="filter-btn" data-filter="oversold" onclick="setFilter('oversold', this)">超卖 &lt;30</button>
+        <button class="filter-btn" data-filter="near" onclick="setFilter('near', this)">近超卖 30-40</button>
+        <button class="filter-btn" data-filter="overbought" onclick="setFilter('overbought', this)">超买 &gt;70</button>
+      </div>
+      <!-- Sort -->
+      <div class="flex items-center gap-1.5 ml-2">
+        <span class="text-xs text-slate-500">排序:</span>
+        <button class="sort-btn active" onclick="setSort('rsi_asc', this)">RSI ↑</button>
+        <button class="sort-btn" onclick="setSort('rsi_desc', this)">RSI ↓</button>
+        <button class="sort-btn" onclick="setSort('alpha', this)">字母</button>
+      </div>
+      <!-- Search -->
+      <div class="ml-auto">
+        <input id="search-input" type="text" placeholder="搜索代币..." oninput="renderTable()"
+          class="bg-slate-800 border border-slate-600 rounded-lg text-xs text-white px-3 py-1.5 w-36 focus:outline-none focus:border-indigo-500 placeholder-slate-500" />
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card p-4">
+      <div id="rsi-container" class="text-xs">
+        <div class="text-slate-500 text-center py-10">等待扫描数据...</div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  let token = localStorage.getItem('token');
+  if (!token) window.location.href = '/login.html';
+
+  let ws = null;
+  let allItems = [];       // latest snapshot from server (sorted asc by RSI)
+  let configuredPairs = null;  // user's configured pair symbols (null = not loaded yet)
+  let currentFilter = 'all';
+  let currentSort = 'rsi_asc';
+
+  async function api(path) {
+    const res = await fetch(path, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.status === 401) { logout(); return null; }
+    return res.json();
+  }
+
+  function logout() {
+    localStorage.removeItem('token');
+    window.location.href = '/login.html';
+  }
+
+  async function init() {
+    const me = await api('/api/auth/me');
+    if (me) document.getElementById('user-info').textContent = `👤 ${me.username}`;
+    const pairs = await api('/api/trading/pairs');
+    // 只显示 is_enabled=true 的对，与 bot 实际交易范围一致
+    if (pairs) configuredPairs = new Set(pairs.filter(p => p.is_enabled !== false).map(p => p.symbol));
+    connectWs();
+  }
+
+  // ── Filter / Sort ───────────────────────────────────────────────────────────
+
+  function setFilter(val, btn) {
+    currentFilter = val;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderTable();
+  }
+
+  function setSort(val, btn) {
+    currentSort = val;
+    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderTable();
+  }
+
+  // ── Stats bar ───────────────────────────────────────────────────────────────
+
+  function updateStats(items) {
+    const subtitle = document.getElementById('scanner-subtitle');
+    if (subtitle && items.length > 0) {
+      subtitle.textContent = `实时监控 ${items.length} 个交易对 RSI(14) · 1 分钟 K 线 · 每 2 秒刷新`;
+    }
+    let oversold = 0, nearOversold = 0, neutral = 0, nearOverbought = 0, overbought = 0;
+    for (const it of items) {
+      const r = it.rsi;
+      if (r < 30) oversold++;
+      else if (r < 40) nearOversold++;
+      else if (r <= 60) neutral++;
+      else if (r <= 70) nearOverbought++;
+      else overbought++;
+    }
+    document.getElementById('cnt-oversold').textContent = oversold;
+    document.getElementById('cnt-near-oversold').textContent = nearOversold;
+    document.getElementById('cnt-neutral').textContent = neutral;
+    document.getElementById('cnt-near-overbought').textContent = nearOverbought;
+    document.getElementById('cnt-overbought').textContent = overbought;
+    document.getElementById('cnt-ready').textContent = items.length;
+  }
+
+  // ── Table render ────────────────────────────────────────────────────────────
+
+  function applyFilterSort(items) {
+    const query = (document.getElementById('search-input')?.value || '').trim().toUpperCase();
+
+    let filtered = items.filter(it => {
+      const base = it.symbol.replace('/USDT', '').toUpperCase();
+      if (query && !base.includes(query)) return false;
+      if (currentFilter === 'oversold') return it.rsi < 30;
+      if (currentFilter === 'near') return it.rsi >= 30 && it.rsi < 40;
+      if (currentFilter === 'overbought') return it.rsi > 70;
+      return true;
+    });
+
+    if (currentSort === 'rsi_asc') filtered.sort((a, b) => a.rsi - b.rsi);
+    else if (currentSort === 'rsi_desc') filtered.sort((a, b) => b.rsi - a.rsi);
+    else filtered.sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+    return filtered;
+  }
+
+  function rsiColor(rsi) {
+    if (rsi < 30) return { text: 'text-red-400', bar: 'bg-red-500', label: '超卖' };
+    if (rsi < 40) return { text: 'text-orange-400', bar: 'bg-orange-400', label: '近超卖' };
+    if (rsi > 70) return { text: 'text-green-400', bar: 'bg-green-500', label: '超买' };
+    if (rsi > 60) return { text: 'text-blue-400', bar: 'bg-blue-400', label: '近超买' };
+    return { text: 'text-slate-300', bar: 'bg-indigo-500', label: '中性' };
+  }
+
+  function renderTable() {
+    const el = document.getElementById('rsi-container');
+    if (!allItems.length) {
+      el.innerHTML = '<div class="text-slate-500 text-center py-10">暂无 RSI 数据，正在初始化行情，请稍候（约 15-30 秒）...</div>';
+      return;
+    }
+
+    const items = applyFilterSort(allItems);
+    if (!items.length) {
+      el.innerHTML = '<div class="text-slate-500 text-center py-10">无符合条件的交易对</div>';
+      return;
+    }
+
+    // split into two columns
+    const mid = Math.ceil(items.length / 2);
+    const left = items.slice(0, mid);
+    const right = items.slice(mid);
+
+    function renderColumn(colItems, offset) {
+      if (!colItems.length) return '';
+      return `
+        <table class="w-full">
+          <thead>
+            <tr class="text-slate-500 border-b border-slate-700 text-xs">
+              <th class="text-left py-1.5 w-8">#</th>
+              <th class="text-left py-1.5">代币</th>
+              <th class="text-left py-1.5">价格(U)</th>
+              <th class="text-left py-1.5">RSI</th>
+              <th class="text-left py-1.5">状态</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            ${colItems.map((it, idx) => {
+              const base = it.symbol.replace('/USDT', '');
+              const pct = Math.min(100, Math.max(0, it.rsi));
+              const c = rsiColor(it.rsi);
+              const price = it.price > 0 ? it.price.toPrecision(5) : '--';
+              return `
+                <tr class="hover:bg-slate-800/40">
+                  <td class="py-1.5 text-slate-500">${offset + idx + 1}</td>
+                  <td class="py-1.5 font-medium text-white">${base}</td>
+                  <td class="py-1.5 text-slate-300">${price}</td>
+                  <td class="py-1.5">
+                    <div class="flex items-center gap-2">
+                      <div class="w-16 rsi-bar"><div class="rsi-fill ${c.bar}" style="width:${pct}%"></div></div>
+                      <span class="font-mono ${c.text}">${it.rsi.toFixed(1)}</span>
+                    </div>
+                  </td>
+                  <td class="py-1.5 ${c.text}">${c.label}</td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    el.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>${renderColumn(left, 0)}</div>
+        <div>${renderColumn(right, mid)}</div>
+      </div>`;
+  }
+
+  // ── WebSocket ────────────────────────────────────────────────────────────────
+
+  function setConnStatus(status) {
+    const el = document.getElementById('conn-status');
+    const map = {
+      connecting: ['连接中...', 'bg-yellow-500/15 text-yellow-400'],
+      connected:  ['已连接', 'bg-green-500/15 text-green-400'],
+      reconnecting: ['重连中...', 'bg-orange-500/15 text-orange-400'],
+    };
+    const [text, cls] = map[status] || map.connecting;
+    el.textContent = text;
+    el.className = `text-xs px-2.5 py-1 rounded-full font-medium ${cls}`;
+  }
+
+  function connectWs() {
+    setConnStatus('connecting');
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws/rsi?token=${encodeURIComponent(token)}`);
+
+    ws.onopen = () => setConnStatus('connected');
+
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'public_rsi_snapshot') {
+          const items = msg.items || [];
+          allItems = configuredPairs
+            ? items.filter(it => configuredPairs.has(it.symbol))
+            : items;
+          updateStats(allItems);
+          renderTable();
+          const ts = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+          document.getElementById('last-updated').textContent = `最近更新：${ts}`;
+        }
+      } catch (e) { /* ignore */ }
+    };
+
+    ws.onclose = () => {
+      setConnStatus('reconnecting');
+      setTimeout(connectWs, 2000);
+    };
+
+    ws.onerror = () => {
+      try { ws.close(); } catch (e) {}
+    };
+  }
+
+  init();
+</script>
+</body>
+</html>

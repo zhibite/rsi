@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RSI 马丁策略 - 交易记录</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #0f172a; color: #e2e8f0; }
+    .sidebar { background: #1e293b; border-right: 1px solid #334155; }
+    .nav-item { transition: all 0.15s; }
+    .nav-item:hover, .nav-item.active { background: rgba(99,102,241,0.15); color: #818cf8; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+  </style>
+</head>
+<body class="flex min-h-screen">
+
+<aside class="sidebar w-56 flex-shrink-0 flex flex-col py-6 px-3 fixed h-full z-10">
+  <div class="px-3 mb-8">
+    <div class="text-lg font-bold text-white flex items-center gap-2">
+      <span class="text-2xl">📈</span> RSI 马丁
+    </div>
+    <div class="text-xs text-slate-500 mt-0.5">量化交易平台</div>
+  </div>
+  <nav class="flex-1 space-y-1">
+    <a href="/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
+      <span>🏠</span> 仪表板
+    </a>
+    <a href="/rsi-scanner.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
+      <span>🔍</span> RSI 扫描
+    </a>
+    <a href="/trades.html" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium">
+      <span>📋</span> 交易记录
+    </a>
+    <a href="/stats.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
+      <span>📊</span> 盈利统计
+    </a>
+    <a href="/backtest.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
+      <span>🧪</span> 历史回测
+    </a>
+    <a href="/settings.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
+      <span>⚙️</span> 配置
+    </a>
+  </nav>
+  <div class="px-3 pt-4 border-t border-slate-700">
+    <div id="user-info" class="text-xs text-slate-500 mb-3"></div>
+    <button onclick="logout()" class="text-xs text-slate-500 hover:text-red-400 transition-colors">退出登录</button>
+  </div>
+</aside>
+
+<main class="ml-56 flex-1 p-6 overflow-auto">
+  <div class="max-w-7xl mx-auto">
+
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-xl font-semibold text-white">交易记录</h1>
+    </div>
+
+    <!-- Filters -->
+    <div class="card p-4 mb-5 flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">交易对</label>
+        <input id="filter-symbol" type="text" placeholder="如 BTC/USDT"
+          class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white w-36" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">方向</label>
+        <select id="filter-side"
+          class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white">
+          <option value="">全部</option>
+          <option value="buy">买入</option>
+          <option value="sell">卖出</option>
+        </select>
+      </div>
+      <button onclick="search()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-1.5 rounded-lg">
+        搜索
+      </button>
+      <button onclick="clearFilter()" class="border border-slate-600 text-slate-400 text-sm px-4 py-1.5 rounded-lg hover:border-slate-500">
+        清除
+      </button>
+      <span id="trade-count" class="text-xs text-slate-500 ml-auto self-center"></span>
+    </div>
+
+    <!-- Table -->
+    <div class="card p-5">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-500 text-xs border-b border-slate-700">
+              <th class="text-left pb-3">时间</th>
+              <th class="text-left pb-3">交易对</th>
+              <th class="text-center pb-3">方向</th>
+              <th class="text-right pb-3">数量</th>
+              <th class="text-right pb-3">价格</th>
+              <th class="text-right pb-3">成交额 (U)</th>
+              <th class="text-right pb-3">本次盈利 (U)</th>
+              <th class="text-center pb-3">备注</th>
+            </tr>
+          </thead>
+          <tbody id="trades-tbody" class="divide-y divide-slate-800">
+            <tr><td colspan="8" class="text-center text-slate-500 py-12">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="flex justify-between items-center mt-4">
+        <button id="prev-btn" onclick="changePage(-1)"
+          class="text-xs text-slate-400 hover:text-white border border-slate-700 px-3 py-1.5 rounded disabled:opacity-30">
+          上一页
+        </button>
+        <span id="page-info" class="text-xs text-slate-500"></span>
+        <button id="next-btn" onclick="changePage(1)"
+          class="text-xs text-slate-400 hover:text-white border border-slate-700 px-3 py-1.5 rounded disabled:opacity-30">
+          下一页
+        </button>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  let token = localStorage.getItem('token');
+  if (!token) window.location.href = '/login.html';
+
+  let currentPage = 0;
+  const PAGE_SIZE = 50;
+
+  async function api(path) {
+    const res = await fetch(path, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.status === 401) { logout(); return null; }
+    return res.json();
+  }
+
+  function logout() { localStorage.removeItem('token'); window.location.href = '/login.html'; }
+
+  async function init() {
+    const me = await api('/api/auth/me');
+    if (me) document.getElementById('user-info').textContent = `👤 ${me.username}`;
+    await loadTrades();
+  }
+
+  async function loadTrades() {
+    const symbol = document.getElementById('filter-symbol').value.trim();
+    const side = document.getElementById('filter-side').value;
+    let url = `/api/trading/orders?limit=${PAGE_SIZE}&offset=${currentPage * PAGE_SIZE}`;
+    if (symbol) url += `&symbol=${encodeURIComponent(symbol)}`;
+    if (side) url += `&side=${side}`;
+
+    const orders = await api(url);
+    if (!orders) return;
+
+    document.getElementById('trade-count').textContent = `共 ${orders.length} 条（本页）`;
+    document.getElementById('page-info').textContent = `第 ${currentPage + 1} 页`;
+    document.getElementById('prev-btn').disabled = currentPage === 0;
+    document.getElementById('next-btn').disabled = orders.length < PAGE_SIZE;
+
+    const tbody = document.getElementById('trades-tbody');
+    if (!orders.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-slate-500 py-12">暂无记录</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = orders.map(o => {
+      const isBuy = o.side === 'buy';
+      const sideLabel = isBuy
+        ? '<span class="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">买入</span>'
+        : '<span class="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400">卖出</span>';
+
+      const pnl = o.realized_pnl;
+      let pnlCell = '<td class="py-3 text-right text-slate-600">—</td>';
+      if (pnl != null) {
+        const color = pnl >= 0 ? 'text-green-400' : 'text-red-400';
+        const sign = pnl >= 0 ? '+' : '';
+        pnlCell = `<td class="py-3 text-right ${color} font-medium">${sign}${pnl.toFixed(4)}</td>`;
+      }
+
+      const noteLabel = {
+        seed:            '首单买入',
+        trailing_stop:   '追踪止盈',
+        overbought_sell: '超买止盈',
+        manual_sell:     '手动卖出',
+      }[o.note] || (o.note?.startsWith('ladder_') ? `马丁补仓 L${o.note.split('_')[1]}` : (o.note || '—'));
+      const noteColor = {
+        seed:            'bg-indigo-500/10 text-indigo-400',
+        trailing_stop:   'bg-orange-500/10 text-orange-400',
+        overbought_sell: 'bg-purple-500/10 text-purple-400',
+        manual_sell:     'bg-pink-500/10 text-pink-400',
+      }[o.note] || (o.note?.startsWith('ladder') ? 'bg-yellow-500/10 text-yellow-400' : 'bg-slate-700 text-slate-400');
+      const noteCell = o.note
+        ? `<span class="px-2 py-0.5 rounded text-xs ${noteColor}">${noteLabel}</span>`
+        : '—';
+
+      const ts = new Date(o.timestamp + 'Z').toLocaleString('zh-CN', { hour12: false });
+
+      return `
+        <tr class="hover:bg-slate-800/40">
+          <td class="py-3 text-slate-500 text-xs whitespace-nowrap">${ts}</td>
+          <td class="py-3 font-medium text-white">${o.symbol}</td>
+          <td class="py-3 text-center">${sideLabel}</td>
+          <td class="py-3 text-right text-slate-300 font-mono text-xs">${o.quantity.toPrecision(6)}</td>
+          <td class="py-3 text-right text-slate-300">${o.price.toPrecision(6)}</td>
+          <td class="py-3 text-right text-slate-300">${o.amount_usdt.toFixed(2)}</td>
+          ${pnlCell}
+          <td class="py-3 text-center">${noteCell}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  function search() { currentPage = 0; loadTrades(); }
+
+  function clearFilter() {
+    document.getElementById('filter-symbol').value = '';
+    document.getElementById('filter-side').value = '';
+    currentPage = 0;
+    loadTrades();
+  }
+
+  function changePage(dir) {
+    if (currentPage + dir < 0) return;
+    currentPage += dir;
+    loadTrades();
+  }
+
+  init();
+</script>
+</body>
+</html>

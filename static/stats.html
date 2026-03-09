@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RSI 马丁策略 - 盈利统计</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #0f172a; color: #e2e8f0; }
+    .sidebar { background: #1e293b; border-right: 1px solid #334155; }
+    .nav-item { transition: all 0.15s; }
+    .nav-item:hover, .nav-item.active { background: rgba(99,102,241,0.15); color: #818cf8; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
+  </style>
+</head>
+<body class="flex min-h-screen">
+
+<aside class="sidebar w-56 flex-shrink-0 flex flex-col py-6 px-3 fixed h-full z-10">
+  <div class="px-3 mb-8">
+    <div class="text-lg font-bold text-white flex items-center gap-2">
+      <span class="text-2xl">📈</span> RSI 马丁
+    </div>
+    <div class="text-xs text-slate-500 mt-0.5">量化交易平台</div>
+  </div>
+  <nav class="flex-1 space-y-1">
+    <a href="/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>🏠</span> 仪表板</a>
+    <a href="/rsi-scanner.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>🔍</span> RSI 扫描</a>
+    <a href="/trades.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>📋</span> 交易记录</a>
+    <a href="/stats.html" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium"><span>📊</span> 盈利统计</a>
+    <a href="/backtest.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>🧪</span> 历史回测</a>
+    <a href="/settings.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>⚙️</span> 配置</a>
+  </nav>
+  <div class="px-3 pt-4 border-t border-slate-700">
+    <div id="user-info" class="text-xs text-slate-500 mb-3"></div>
+    <button onclick="logout()" class="text-xs text-slate-500 hover:text-red-400">退出登录</button>
+  </div>
+</aside>
+
+<main class="ml-56 flex-1 p-6 overflow-auto">
+  <div class="max-w-7xl mx-auto">
+
+    <h1 class="text-xl font-semibold text-white mb-6">盈利统计</h1>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div class="card p-4">
+        <div class="text-xs text-slate-400 mb-1">累计盈亏</div>
+        <div id="s-pnl" class="text-2xl font-bold">--</div>
+        <div class="text-xs text-slate-500 mt-1">USDT（含手续费）</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-slate-400 mb-1">累计手续费</div>
+        <div id="s-fees" class="text-2xl font-bold text-orange-400">--</div>
+        <div class="text-xs text-slate-500 mt-1">USDT（买+卖 0.1%）</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-slate-400 mb-1">总交易次数</div>
+        <div id="s-trades" class="text-2xl font-bold text-white">--</div>
+        <div class="text-xs text-slate-500 mt-1">笔交易</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-slate-400 mb-1">胜率</div>
+        <div id="s-wr" class="text-2xl font-bold text-yellow-400">--</div>
+        <div id="s-wl" class="text-xs text-slate-500 mt-1">--</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-slate-400 mb-1">笔均盈亏</div>
+        <div id="s-avg" class="text-2xl font-bold">--</div>
+        <div class="text-xs text-slate-500 mt-1">USDT / 笔</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Daily PnL Chart -->
+      <div class="card p-5 lg:col-span-2">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white">近30天每日盈亏</h2>
+          <select id="days-sel" onchange="loadChart()" class="bg-slate-800 border border-slate-600 text-xs text-slate-300 rounded px-2 py-1">
+            <option value="7">近7天</option>
+            <option value="30" selected>近30天</option>
+            <option value="90">近90天</option>
+          </select>
+        </div>
+        <canvas id="pnl-chart" height="180"></canvas>
+      </div>
+
+      <!-- Per-Symbol Stats -->
+      <div class="card p-5">
+        <h2 class="text-sm font-semibold text-white mb-4">各币种盈亏</h2>
+        <div id="sym-list" class="space-y-2 text-xs max-h-72 overflow-y-auto">
+          <div class="text-slate-500 text-center py-8">加载中...</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  let token = localStorage.getItem('token');
+  if (!token) window.location.href = '/login.html';
+  let chartInst = null;
+
+  async function api(path) {
+    const res = await fetch(path, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.status === 401) { logout(); return null; }
+    return res.json();
+  }
+  function logout() { localStorage.removeItem('token'); window.location.href = '/login.html'; }
+
+  async function init() {
+    const me = await api('/api/auth/me');
+    if (me) document.getElementById('user-info').textContent = `👤 ${me.username}`;
+    await Promise.all([loadSummary(), loadChart(), loadSymbolStats()]);
+  }
+
+  async function loadSummary() {
+    const d = await api('/api/stats/summary');
+    if (!d) return;
+    const pnlEl = document.getElementById('s-pnl');
+    pnlEl.textContent = (d.total_pnl >= 0 ? '+' : '') + d.total_pnl.toFixed(4);
+    pnlEl.className = `text-2xl font-bold ${d.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
+    document.getElementById('s-fees').textContent = '-' + d.total_fees.toFixed(4);
+    document.getElementById('s-trades').textContent = d.total_trades;
+    document.getElementById('s-wr').textContent = d.win_rate.toFixed(1) + '%';
+    document.getElementById('s-wl').textContent = `盈 ${d.win_trades} / 亏 ${d.loss_trades}`;
+    const avgEl = document.getElementById('s-avg');
+    avgEl.textContent = (d.avg_pnl_per_trade >= 0 ? '+' : '') + d.avg_pnl_per_trade.toFixed(4);
+    avgEl.className = `text-2xl font-bold ${d.avg_pnl_per_trade >= 0 ? 'text-green-400' : 'text-red-400'}`;
+  }
+
+  async function loadChart() {
+    const days = document.getElementById('days-sel').value;
+    const data = await api(`/api/stats/daily-pnl?days=${days}`);
+    if (!data) return;
+
+    const labels = data.map(d => d.date);
+    const values = data.map(d => d.pnl);
+    const colors = values.map(v => v >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
+
+    if (chartInst) chartInst.destroy();
+    const ctx = document.getElementById('pnl-chart').getContext('2d');
+    chartInst = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: '每日盈亏 (USDT)',
+          data: values,
+          backgroundColor: colors,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          label: ctx => `${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toFixed(4)} USDT`
+        }}},
+        scales: {
+          x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', maxRotation: 45 } },
+          y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8',
+            callback: v => `${v >= 0 ? '+' : ''}${v.toFixed(2)}` } },
+        },
+      }
+    });
+  }
+
+  async function loadSymbolStats() {
+    const data = await api('/api/stats/symbol-pnl');
+    if (!data) return;
+    const el = document.getElementById('sym-list');
+    if (!data.length) {
+      el.innerHTML = '<div class="text-slate-500 text-center py-8">暂无数据</div>';
+      return;
+    }
+    el.innerHTML = data.map(s => {
+      const color = s.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+      const sign = s.pnl >= 0 ? '+' : '';
+      return `
+        <div class="flex items-center justify-between py-1.5 border-b border-slate-800">
+          <div>
+            <div class="text-slate-300 font-medium">${s.symbol}</div>
+            <div class="text-slate-500">${s.trades}笔 · 胜率${s.win_rate}%</div>
+          </div>
+          <div class="${color} font-mono font-semibold">${sign}${s.pnl.toFixed(4)}</div>
+        </div>`;
+    }).join('');
+  }
+
+  init();
+</script>
+</body>
+</html>

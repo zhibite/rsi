@@ -1,0 +1,27 @@
+[Unit]
+Description=RSI Martin Trading Bot web + API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# 运行账号（部署脚本会创建 rsi 用户）
+User=rsi
+Group=rsi
+
+# 代码目录
+WorkingDirectory=/opt/bquant/rsi
+
+# 只监听本机，由 Nginx 等反向代理对外暴露
+Environment=WEB_HOST=127.0.0.1
+Environment=WEB_PORT=8000
+
+# run.py 会读取同目录下的 .env（用 pydantic-settings）
+ExecStart=/opt/bquant/venv-rsi/bin/python run.py
+
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
