@@ -73,6 +73,26 @@ ensure_user() {
   usermod -a -G "${APP_GROUP}" "${APP_USER}" || true
 }
 
+build_frontend() {
+  local fe_dir="${REPO_ROOT}/frontend"
+  if [[ ! -d "${fe_dir}" ]]; then
+    log "未检测到 frontend/ 目录，跳过前端构建"
+    return
+  fi
+
+  if ! has_cmd node; then
+    log "本机未安装 Node.js，跳过前端构建（使用已提交的 dist/）"
+    return
+  fi
+
+  log "构建 Vue 前端 (npm run build)..."
+  cd "${fe_dir}"
+  npm install --silent
+  npm run build
+  cd "${REPO_ROOT}"
+  log "前端构建完成：frontend/dist/ 已生成"
+}
+
 sync_code() {
   log "创建目录 ${BASE_DIR} ..."
   mkdir -p "${BASE_DIR}"
@@ -83,6 +103,7 @@ sync_code() {
     --exclude ".env" \
     --exclude "__pycache__" \
     --exclude "*.pyc" \
+    --exclude "frontend/node_modules" \
     "${REPO_ROOT}/" "${BASE_DIR}/"
 
   if [[ ! -f "${BASE_DIR}/.env" && -f "${BASE_DIR}/.env.example" ]]; then
@@ -186,6 +207,7 @@ main() {
 
   install_pkgs
   ensure_user
+  build_frontend
   sync_code
   create_venv
   install_systemd_unit
