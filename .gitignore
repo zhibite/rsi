@@ -1,5 +1,6 @@
 # 环境与密钥（绝对不能提交）
 .env
+update_server.sh
 *.db
 *.db-wal
 *.db-shm
