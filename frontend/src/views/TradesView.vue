@@ -26,14 +26,14 @@
     </div>
 
     <!-- List -->
-    <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
-      <van-list v-model:loading="loading" :finished="finished" finished-text="没有更多了" @load="loadMore">
+    <div class="order-list">
+      <div v-if="loading" class="loading-tip">加载中…</div>
+
+      <template v-else>
         <div v-for="order in orders" :key="order.id" class="order-card">
-          <!-- Left colored border by side -->
           <div class="order-side-bar" :class="order.side === 'buy' ? 'bar-buy' : (order.realized_pnl != null && order.realized_pnl < 0 ? 'bar-loss' : 'bar-sell')"></div>
 
           <div class="order-body">
-            <!-- Row 1: symbol + side badge + PnL -->
             <div class="order-top">
               <span class="order-symbol">{{ order.symbol.replace('/USDT', '') }}</span>
               <span class="order-usdt">/USDT</span>
@@ -45,7 +45,6 @@
               </span>
             </div>
 
-            <!-- Row 2: price / qty / amount -->
             <div class="order-metrics">
               <div class="metric">
                 <span class="metric-label">价格</span>
@@ -63,15 +62,23 @@
               </div>
             </div>
 
-            <!-- Row 3: note badge + timestamp -->
             <div class="order-footer">
               <span class="note-badge" :class="noteBadgeClass(order.note)">{{ noteLabel(order.note) }}</span>
               <span class="order-time">{{ fmtTime(order.timestamp) }}</span>
             </div>
           </div>
         </div>
-      </van-list>
-    </van-pull-refresh>
+
+        <div v-if="orders.length === 0" class="empty-tip">暂无记录</div>
+      </template>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <button class="page-btn" :disabled="currentPage === 1" @click="goPage(currentPage - 1)">← 上一页</button>
+      <span class="page-info">第 {{ currentPage }} 页</span>
+      <button class="page-btn" :disabled="!hasMore" @click="goPage(currentPage + 1)">下一页 →</button>
+    </div>
   </div>
 </template>
 
@@ -87,11 +94,11 @@ const sideOptions = [
   { text: '卖出', value: 'sell' },
 ]
 
-const orders     = ref([])
-const loading    = ref(false)
-const finished   = ref(false)
-const refreshing = ref(false)
-let offset = 0
+const PAGE_SIZE = 10
+const orders      = ref([])
+const loading     = ref(false)
+const currentPage = ref(1)
+const hasMore     = ref(false)
 
 const noteMap = { seed: '首单', ladder_1: 'M1', ladder_2: 'M2', ladder_3: 'M3', ladder_4: 'M4', ladder_5: 'M5', trailing_stop: '追踪止盈', overbought_sell: '超买止盈', stop_loss: '止损', manual_sell: '手动卖' }
 const noteLabel = (n) => noteMap[n] || n || '--'
@@ -105,22 +112,26 @@ const noteBadgeClass = (n) => {
   return 'note-badge note-default'
 }
 
-async function loadMore() {
-  const params = { limit: 50, offset }
+async function fetchPage(page) {
+  loading.value = true
+  const params = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }
   if (symFilter.value) params.symbol = symFilter.value
   if (sideFilter.value !== 'all') params.side = sideFilter.value
   const res = await getOrders(params)
-  if (!res || res.length === 0) { finished.value = true; loading.value = false; return }
-  orders.value.push(...res)
-  offset += 50
-  if (res.length < 50) finished.value = true
   loading.value = false
+  orders.value = res || []
+  hasMore.value = (res?.length ?? 0) === PAGE_SIZE
+}
+
+async function goPage(page) {
+  currentPage.value = page
+  await fetchPage(page)
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 async function onRefresh() {
-  orders.value = []; offset = 0; finished.value = false
-  await loadMore()
-  refreshing.value = false
+  currentPage.value = 1
+  await fetchPage(1)
 }
 
 watch([symFilter, sideFilter], onRefresh)
@@ -284,5 +295,53 @@ onMounted(onRefresh)
 .note-badge.note-default  { background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border-subtle); }
 
 .order-time { font-size: 11px; color: var(--text-muted); }
+
+/* ── Pagination ── */
+.order-list { padding-bottom: 4px; }
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 14px 8px;
+}
+.page-btn {
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border-vis);
+  background: var(--bg-card);
+  color: var(--text-sec);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+.page-btn:not(:disabled):hover { border-color: var(--accent-from); color: var(--accent-from); }
+.page-btn:not(:disabled):active { transform: scale(0.96); }
+.page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.page-info {
+  font-size: 13px;
+  color: var(--text-muted);
+  min-width: 60px;
+  text-align: center;
+}
+
+/* ── Loading / Empty ── */
+.loading-tip {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 40px;
+}
+.empty-tip {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 40px;
+}
 </style>
 
