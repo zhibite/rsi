@@ -18,7 +18,7 @@ SERVER_USER="root"
 SERVER_IP="157.173.207.152"
 SERVER_DIR="/opt/bquant/rsi"
 SERVICE_NAME="rsi.service"
-SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
+SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o PasswordAuthentication=yes"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_DIR="${SCRIPT_DIR}/frontend"
