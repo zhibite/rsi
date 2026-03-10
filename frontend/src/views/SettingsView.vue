@@ -60,23 +60,78 @@
 
       <van-tab title="策略">
         <div class="tab-body">
-          <van-cell-group inset>
-            <van-field v-model.number="strat.rsi_oversold"   label="RSI 超卖阈值" type="number" :border="false" />
-            <van-field v-model.number="strat.rsi_overbought" label="RSI 超买阈值" type="number" :border="false" />
-            <van-field v-model.number="strat.rsi_period"     label="RSI 周期"    type="number" :border="false" />
-            <van-field v-model.number="strat.scan_interval"  label="扫描间隔(秒)" type="number" :border="false" />
-            <van-field v-model.number="strat.max_open_positions" label="最大持仓数" type="number" :border="false" />
-            <van-field v-model.number="strat.first_order_amount" label="首单金额(U)" type="number" :border="false" />
-            <van-field v-model.number="strat.martin_multiplier"  label="马丁倍数"   type="number" :border="false" />
-            <van-field v-model.number="strat.max_martin_levels"  label="最大补仓层" type="number" :border="false" />
-            <van-field v-model.number="strat.take_profit_pct"    label="止盈启动(%)" type="number" :border="false" />
-            <van-field v-model.number="strat.trailing_stop_pct"  label="追踪回撤(%)" type="number" :border="false" />
-            <van-field v-model.number="strat.replenishment_retracement_pct" label="补仓回撤(%)" type="number" :border="false" />
-            <van-field v-model.number="strat.rsi_overbought"        label="超买 RSI 基准" type="number" :border="false" />
-            <van-field v-model.number="strat.overbought_rsi_step"   label="超买 RSI 步长" type="number" :border="false" />
-            <van-field v-model.number="strat.overbought_min_profit_pct" label="超买最低利润(%)" type="number" :border="false" />
-            <van-field v-model.number="strat.overbought_profit_step"    label="利润步长(%)" type="number" :border="false" />
-          </van-cell-group>
+          <div class="section-title">RSI 参数</div>
+          <div class="field-grid">
+            <div class="field-item">
+              <div class="field-label">RSI 超卖阈值</div>
+              <input class="field-input" v-model.number="strat.rsi_oversold" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">RSI 超买阈值</div>
+              <input class="field-input" v-model.number="strat.rsi_overbought" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">RSI 周期</div>
+              <input class="field-input" v-model.number="strat.rsi_period" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">扫描间隔 (秒)</div>
+              <input class="field-input" v-model.number="strat.scan_interval" type="number" />
+            </div>
+          </div>
+
+          <div class="section-title">马丁策略</div>
+          <div class="field-grid">
+            <div class="field-item">
+              <div class="field-label">最大持仓数</div>
+              <input class="field-input" v-model.number="strat.max_open_positions" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">首单金额 (U)</div>
+              <input class="field-input" v-model.number="strat.first_order_amount" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">马丁倍数</div>
+              <input class="field-input" v-model.number="strat.martin_multiplier" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">最大补仓层数</div>
+              <input class="field-input" v-model.number="strat.max_martin_levels" type="number" />
+            </div>
+          </div>
+
+          <div class="section-title">止盈止损</div>
+          <div class="field-grid">
+            <div class="field-item">
+              <div class="field-label">止盈启动 (%)</div>
+              <input class="field-input" v-model.number="strat.take_profit_pct" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">追踪回撤 (%)</div>
+              <input class="field-input" v-model.number="strat.trailing_stop_pct" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">补仓回撤 (%)</div>
+              <input class="field-input" v-model.number="strat.replenishment_retracement_pct" type="number" />
+            </div>
+          </div>
+
+          <div class="section-title">超买止盈</div>
+          <div class="field-grid">
+            <div class="field-item">
+              <div class="field-label">超买 RSI 步长</div>
+              <input class="field-input" v-model.number="strat.overbought_rsi_step" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">最低利润 (%)</div>
+              <input class="field-input" v-model.number="strat.overbought_min_profit_pct" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">利润步长 (%)</div>
+              <input class="field-input" v-model.number="strat.overbought_profit_step" type="number" />
+            </div>
+          </div>
+
           <div class="save-row">
             <van-button block type="primary" :loading="savingStrat" @click="saveStrat" class="save-btn">保存策略</van-button>
           </div>
@@ -85,17 +140,38 @@
 
       <van-tab title="风控">
         <div class="tab-body">
-          <van-cell-group inset>
-            <van-field v-model.number="strat.max_loss_pct" label="硬止损浮亏(%)" type="number" placeholder="0=关闭" :border="false" />
-            <van-field v-model.number="strat.martin_cooldown_seconds" label="补仓冷却(秒)" type="number" placeholder="0=关闭" :border="false" />
-            <van-field v-model.number="strat.btc_drop_pct"     label="BTC熔断跌幅(%)" type="number" :border="false" />
-            <van-field v-model.number="strat.btc_drop_minutes" label="熔断监测窗口(min)" type="number" :border="false" />
-            <van-field v-model.number="strat.btc_pause_minutes" label="熔断暂停时长(min)" type="number" :border="false" />
-          </van-cell-group>
+          <div class="section-title">止损保护</div>
+          <div class="field-grid">
+            <div class="field-item">
+              <div class="field-label">硬止损浮亏 (%)<span class="field-hint">0=关闭</span></div>
+              <input class="field-input" v-model.number="strat.max_loss_pct" type="number" placeholder="0" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">补仓冷却 (秒)<span class="field-hint">0=关闭</span></div>
+              <input class="field-input" v-model.number="strat.martin_cooldown_seconds" type="number" placeholder="0" />
+            </div>
+          </div>
+
+          <div class="section-title">BTC 熔断</div>
+          <div class="field-grid">
+            <div class="field-item">
+              <div class="field-label">熔断跌幅 (%)<span class="field-hint">0=关闭</span></div>
+              <input class="field-input" v-model.number="strat.btc_drop_pct" type="number" placeholder="0" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">监测窗口 (分钟)</div>
+              <input class="field-input" v-model.number="strat.btc_drop_minutes" type="number" />
+            </div>
+            <div class="field-item">
+              <div class="field-label">暂停时长 (分钟)</div>
+              <input class="field-input" v-model.number="strat.btc_pause_minutes" type="number" />
+            </div>
+          </div>
+
           <div class="save-row">
             <van-button block type="primary" :loading="savingStrat" @click="saveStrat" class="save-btn">保存风控</van-button>
           </div>
-          <div class="risk-note">硬止损和BTC熔断实时生效，无需重启Bot。熔断期间已有持仓正常管理，仅暂停新开仓。</div>
+          <div class="risk-note">硬止损和 BTC 熔断实时生效，无需重启 Bot。熔断期间已有持仓正常管理，仅暂停新开仓。</div>
         </div>
       </van-tab>
     </van-tabs>
@@ -181,19 +257,81 @@ onMounted(async () => {
 
 <style scoped>
 .settings { background: #0f172a; min-height: 100vh; }
-.tab-body { padding: 12px; }
+.tab-body { padding: 14px; }
+
+/* section 标题 */
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #38bdf8;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 18px 0 10px;
+  padding-left: 2px;
+}
+.section-title:first-child { margin-top: 4px; }
+
+/* 两列网格表单 */
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.field-item {
+  background: #1e293b;
+  border-radius: 10px;
+  padding: 10px 12px 12px;
+}
+.field-label {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.field-hint {
+  font-size: 10px;
+  color: #475569;
+  background: #0f172a;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.field-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 6px 8px;
+  outline: none;
+  -webkit-appearance: none;
+}
+.field-input:focus { border-color: #38bdf8; }
+
+/* API 配置卡片 */
 .cfg-card { background: #1e293b; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
 .cfg-row  { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .cfg-label { font-size: 14px; font-weight: 700; color: #e2e8f0; flex: 1; }
-.cfg-key   { font-size: 12px; color: #64748b; margin-bottom: 8px; }
+.cfg-key   { font-size: 12px; color: #64748b; margin-bottom: 8px; font-family: monospace; }
 .cfg-actions { display: flex; }
+
+/* 交易对 */
 .pair-toolbar { display: flex; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
 .pair-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #1e293b; gap: 8px; }
 .pair-sym { font-size: 14px; color: #e2e8f0; flex: 1; }
 .pair-meta { font-size: 11px; color: #64748b; }
-.save-row { margin-top: 16px; }
+
+/* 保存按钮 */
+.save-row { margin-top: 20px; }
 .save-btn { border-radius: 10px; height: 48px; font-size: 16px; }
-.risk-note { margin-top: 12px; font-size: 12px; color: #64748b; line-height: 1.6; padding: 10px; background: #1e293b; border-radius: 8px; }
+
+/* 风控说明 */
+.risk-note { margin-top: 12px; font-size: 12px; color: #64748b; line-height: 1.6; padding: 10px 12px; background: #1e293b; border-radius: 8px; }
+
 .empty-tip { text-align: center; color: #475569; padding: 40px; }
 .dialog-form { padding: 12px 0; }
 </style>

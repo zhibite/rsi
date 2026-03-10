@@ -1,54 +1,115 @@
 <template>
   <div class="dashboard">
-    <van-nav-bar title="交易主页" :right-text="auth.user?.username" @click-right="logout" />
+    <!-- Custom Header -->
+    <div class="dash-header">
+      <div class="dash-header-left">
+        <div class="header-logo">B</div>
+        <div>
+          <div class="header-title">交易主页</div>
+          <div class="header-sub">BQuant RSI Bot</div>
+        </div>
+      </div>
+      <div class="avatar-btn" @click="logout">
+        <span class="avatar-initials">{{ auth.user?.username?.charAt(0)?.toUpperCase() || 'U' }}</span>
+      </div>
+    </div>
 
+    <!-- Stats 2x2 grid -->
     <div class="stats-grid">
       <div class="stat-card">
+        <div class="stat-icon">💰</div>
         <div class="stat-label">USDT 余额</div>
-        <div class="stat-value">{{ balance ?? '--' }}</div>
+        <div class="stat-value mono accent-num">{{ balance ?? '--' }}</div>
       </div>
       <div class="stat-card">
+        <div class="stat-icon">📈</div>
         <div class="stat-label">累计盈亏</div>
-        <div class="stat-value" :class="pnlClass(summary?.total_pnl)">
+        <div class="stat-value mono" :class="pnlClass(summary?.total_pnl)">
           {{ summary?.total_pnl != null ? summary.total_pnl.toFixed(2) : '--' }}
         </div>
       </div>
       <div class="stat-card">
+        <div class="stat-icon">📊</div>
         <div class="stat-label">持仓数</div>
-        <div class="stat-value">{{ bot.positions.length }}</div>
+        <div class="stat-value mono accent-num">{{ bot.positions.length }}</div>
       </div>
       <div class="stat-card">
+        <div class="stat-icon">🎯</div>
         <div class="stat-label">胜率</div>
-        <div class="stat-value">{{ summary?.win_rate != null ? summary.win_rate.toFixed(1) + '%' : '--' }}</div>
+        <div class="stat-value mono">{{ summary?.win_rate != null ? summary.win_rate.toFixed(1) + '%' : '--' }}</div>
       </div>
     </div>
 
-    <div class="section">
-      <van-button block :type="bot.running ? 'danger' : 'primary'" :loading="botLoading" @click="toggleBot" class="bot-btn">
-        {{ bot.running ? '停止 Bot' : '启动 Bot' }}
-      </van-button>
+    <!-- Bot control button -->
+    <div class="bot-section">
+      <button
+        class="bot-btn"
+        :class="bot.running ? 'bot-running' : 'bot-stopped'"
+        :disabled="botLoading"
+        @click="toggleBot"
+      >
+        <span v-if="bot.running" class="pulse-dot"></span>
+        <span v-if="botLoading" class="btn-spinner"></span>
+        <span v-else>{{ bot.running ? '停止 Bot' : '启动 Bot' }}</span>
+      </button>
     </div>
 
-    <div class="section-title">当前持仓 ({{ bot.positions.length }})</div>
-    <div v-if="bot.positions.length === 0" class="empty-tip">暂无持仓</div>
-    <div v-for="pos in bot.positions" :key="pos.id" class="pos-card" @click="showPosMenu(pos)">
-      <div class="pos-top">
-        <span class="pos-symbol">{{ pos.symbol }}</span>
-        <span class="pos-pnl" :class="pnlClass(pos.pnl_pct)">
-          {{ pos.pnl_pct != null ? (pos.pnl_pct > 0 ? '+' : '') + pos.pnl_pct.toFixed(2) + '%' : '--' }}
-        </span>
-      </div>
-      <div class="pos-row">
-        <span class="pos-meta">均价 {{ pos.avg_price?.toFixed(4) }}</span>
-        <span class="pos-meta">现价 {{ pos.current_price?.toFixed(4) ?? '--' }}</span>
-      </div>
-      <div class="pos-row">
-        <van-tag :type="pos.martin_level > 0 ? 'warning' : 'primary'" size="mini">L{{ pos.martin_level }}</van-tag>
-        <van-tag v-if="pos.trailing_active" type="success" size="mini" style="margin-left:4px">追踪中</van-tag>
-        <span class="pos-meta" style="margin-left:auto">RSI {{ bot.rsi[pos.symbol] != null ? bot.rsi[pos.symbol].toFixed(1) : '--' }}</span>
+    <!-- Positions -->
+    <div class="section-header">
+      <span class="section-title">当前持仓</span>
+      <span class="section-badge">{{ bot.positions.length }}</span>
+    </div>
+
+    <div v-if="bot.positions.length === 0" class="empty-tip">
+      <div class="empty-icon">📭</div>
+      <div>暂无持仓</div>
+    </div>
+
+    <div
+      v-for="pos in bot.positions"
+      :key="pos.id"
+      class="pos-card"
+      :class="pnlClass(pos.pnl_pct)"
+      @click="showPosMenu(pos)"
+    >
+      <!-- Left accent bar -->
+      <div class="pos-accent-bar" :class="pnlClass(pos.pnl_pct)"></div>
+
+      <div class="pos-content">
+        <div class="pos-top">
+          <div class="pos-left">
+            <span class="pos-symbol">{{ pos.symbol.replace('/USDT', '') }}</span>
+            <span class="pos-usdt">/USDT</span>
+            <span class="martin-badge" :class="pos.martin_level > 0 ? 'martin-warn' : 'martin-base'">
+              L{{ pos.martin_level }}
+            </span>
+            <span v-if="pos.trailing_active" class="trailing-badge">追踪</span>
+          </div>
+          <div class="pos-pnl-block">
+            <span class="pos-pnl mono" :class="pnlClass(pos.pnl_pct)">
+              {{ pos.pnl_pct != null ? (pos.pnl_pct > 0 ? '+' : '') + pos.pnl_pct.toFixed(2) + '%' : '--' }}
+            </span>
+          </div>
+        </div>
+
+        <div class="pos-prices">
+          <div class="price-item">
+            <span class="price-label">均价</span>
+            <span class="price-val mono">{{ pos.avg_price?.toFixed(4) ?? '--' }}</span>
+          </div>
+          <div class="price-divider"></div>
+          <div class="price-item">
+            <span class="price-label">现价</span>
+            <span class="price-val mono">{{ pos.current_price?.toFixed(4) ?? '--' }}</span>
+          </div>
+          <div class="rsi-pill">
+            RSI <span class="mono">{{ bot.rsi[pos.symbol] != null ? bot.rsi[pos.symbol].toFixed(1) : '--' }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- Action sheet & dialogs (unchanged bindings) -->
     <van-action-sheet v-model:show="menuShow" :title="menuPos?.symbol" :actions="menuActions" @select="onMenuAction" cancel-text="取消" />
 
     <van-dialog v-model:show="sellShow" title="手动卖出" :before-close="onSellConfirm" show-cancel-button>
@@ -67,12 +128,15 @@
       </div>
     </van-dialog>
 
-    <div class="section-title">运行日志</div>
+    <!-- Logs -->
+    <div class="section-header" style="margin-top: 16px;">
+      <span class="section-title">运行日志</span>
+    </div>
     <div class="log-box">
       <div v-for="log in bot.logs.slice(0, 60)" :key="log.id" class="log-item" :class="'log-' + log.level.toLowerCase()">
         <span class="log-time">{{ fmtTime(log.timestamp) }}</span>
-        <span v-if="log.symbol" class="log-sym">[{{ log.symbol }}]</span>
-        <span>{{ log.message }}</span>
+        <span v-if="log.symbol" class="log-sym">{{ log.symbol }}</span>
+        <span class="log-msg">{{ log.message }}</span>
       </div>
       <div v-if="bot.logs.length === 0" class="empty-tip">暂无日志</div>
     </div>
@@ -156,26 +220,286 @@ function logout() {
 </script>
 
 <style scoped>
-.dashboard { background: #0f172a; min-height: 100vh; }
-.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
-.stat-card  { background: #1e293b; border-radius: 10px; padding: 14px; }
-.stat-label { font-size: 11px; color: #64748b; margin-bottom: 6px; }
-.stat-value { font-size: 20px; font-weight: 700; color: #e2e8f0; }
-.green { color: #22c55e; } .red { color: #ef4444; }
-.section { padding: 0 12px 12px; }
-.bot-btn { border-radius: 10px; height: 50px; font-size: 16px; font-weight: 600; }
-.section-title { padding: 8px 12px 4px; font-size: 12px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; }
-.pos-card { margin: 0 12px 10px; background: #1e293b; border-radius: 10px; padding: 14px; cursor: pointer; }
-.pos-top  { display: flex; justify-content: space-between; margin-bottom: 8px; }
-.pos-symbol { font-size: 15px; font-weight: 700; color: #e2e8f0; }
-.pos-pnl   { font-size: 16px; font-weight: 700; }
-.pos-row   { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-.pos-meta  { font-size: 12px; color: #64748b; }
-.empty-tip { text-align: center; color: #475569; font-size: 13px; padding: 24px; }
-.log-box   { margin: 0 12px 16px; background: #0f172a; border: 1px solid #1e293b; border-radius: 10px; padding: 10px; max-height: 280px; overflow-y: auto; }
-.log-item  { font-size: 11px; padding: 3px 0; border-bottom: 1px solid #1e293b; color: #94a3b8; line-height: 1.5; }
-.log-warning { color: #f59e0b; } .log-error { color: #ef4444; }
-.log-time  { color: #475569; margin-right: 6px; }
-.log-sym   { color: #60a5fa; margin-right: 4px; }
-.dialog-body { padding: 20px; }
+.dashboard {
+  background: var(--bg-page);
+  min-height: 100vh;
+  padding-bottom: 16px;
+}
+
+/* ── Header ── */
+.dash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.dash-header-left { display: flex; align-items: center; gap: 10px; }
+.header-logo {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 16px; color: #fff;
+  flex-shrink: 0;
+}
+.header-title { font-size: 16px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+.header-sub   { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+.avatar-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-vis);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.2s;
+}
+.avatar-btn:active { border-color: var(--accent-from); }
+.avatar-initials { font-size: 14px; font-weight: 700; color: var(--accent-from); }
+
+/* ── Stats grid ── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 14px 14px 0;
+}
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: 14px 14px 12px;
+  box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+}
+.stat-icon   { font-size: 16px; margin-bottom: 6px; }
+.stat-label  { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; letter-spacing: 0.02em; }
+.stat-value  { font-size: 22px; font-weight: 800; color: var(--text-primary); line-height: 1; }
+.accent-num  { background: linear-gradient(90deg, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.mono        { font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace; }
+.green       { color: var(--success) !important; }
+.red         { color: var(--danger) !important; }
+
+/* ── Bot button ── */
+.bot-section { padding: 14px 14px 0; }
+.bot-btn {
+  width: 100%;
+  height: 54px;
+  border-radius: 27px;
+  border: none;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.bot-btn:active  { transform: scale(0.98); }
+.bot-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.bot-stopped {
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+}
+.bot-running {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+}
+
+/* Pulsing green dot when running */
+.pulse-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+  animation: pulse-ring 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+  100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+}
+
+/* Button spinner */
+.btn-spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Section header ── */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 16px 6px;
+}
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.section-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-from);
+  background: rgba(59,130,246,0.12);
+  border-radius: 10px;
+  padding: 2px 7px;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* ── Empty tip ── */
+.empty-tip {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.empty-icon { font-size: 28px; }
+
+/* ── Position cards ── */
+.pos-card {
+  margin: 0 14px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  display: flex;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.pos-card:active { opacity: 0.85; }
+
+.pos-accent-bar {
+  width: 4px;
+  flex-shrink: 0;
+  background: var(--border-vis);
+  border-radius: 0;
+}
+.pos-accent-bar.green { background: linear-gradient(180deg, #10b981, #059669) !important; }
+.pos-accent-bar.red   { background: linear-gradient(180deg, #ef4444, #dc2626) !important; }
+
+.pos-content { flex: 1; padding: 12px 12px 10px; min-width: 0; }
+
+.pos-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.pos-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pos-symbol { font-size: 16px; font-weight: 800; color: var(--text-primary); }
+.pos-usdt   { font-size: 12px; color: var(--text-muted); margin-right: 2px; }
+
+.martin-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  letter-spacing: 0.03em;
+}
+.martin-warn {
+  background: rgba(245,158,11,0.18);
+  color: var(--warning);
+  border: 1px solid rgba(245,158,11,0.25);
+}
+.martin-base {
+  background: rgba(59,130,246,0.15);
+  color: var(--accent-from);
+  border: 1px solid rgba(59,130,246,0.2);
+}
+.trailing-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(16,185,129,0.15);
+  color: var(--success);
+  border: 1px solid rgba(16,185,129,0.2);
+}
+
+.pos-pnl-block { flex-shrink: 0; }
+.pos-pnl {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.pos-prices {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.price-item  { display: flex; flex-direction: column; gap: 2px; }
+.price-label { font-size: 10px; color: var(--text-muted); }
+.price-val   { font-size: 13px; color: var(--text-sec); }
+.price-divider {
+  width: 1px; height: 28px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+.rsi-pill {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+.rsi-pill .mono { color: var(--accent-from); font-weight: 700; }
+
+/* ── Log box ── */
+.log-box {
+  margin: 0 14px 16px;
+  background: var(--bg-deepest);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.log-item {
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  line-height: 1.6;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.log-item:last-child { border-bottom: none; }
+.log-info    { color: #8899b4; }
+.log-warning { color: var(--warning); }
+.log-error   { color: var(--danger); }
+.log-time    { color: #4a6080; flex-shrink: 0; }
+.log-sym     { color: #60a5fa; flex-shrink: 0; font-weight: 600; }
+.log-msg     { color: inherit; }
+
+/* ── Dialog body ── */
+.dialog-body { padding: 20px 20px 8px; }
 </style>
