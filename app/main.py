@@ -182,29 +182,47 @@ app.include_router(stats_router.router)
 app.include_router(backtest_router.router)
 
 # ── Static frontend ────────────────────────────────────────────────────────────
-
+# Vue SPA (frontend/dist/) 优先，旧 static/ 作为备用
+DIST_DIR   = Path(__file__).parent.parent / "frontend" / "dist"
 STATIC_DIR = Path(__file__).parent.parent / "static"
-if STATIC_DIR.exists():
+
+if DIST_DIR.exists():
+    # 托管 Vue build 产物（assets/、icons/ 等静态资源）
+    app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
+    app.mount("/icons",  StaticFiles(directory=str(DIST_DIR / "icons")),  name="icons")
+
+    @app.get("/", include_in_schema=False)
+    def root():
+        return FileResponse(str(DIST_DIR / "index.html"))
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str):
+        # SPA 路由：所有非 API 路径都返回 index.html
+        if full_path.startswith("api/") or full_path.startswith("ws"):
+            raise HTTPException(404)
+        static_file = DIST_DIR / full_path
+        if static_file.exists() and static_file.is_file():
+            return FileResponse(str(static_file))
+        return FileResponse(str(DIST_DIR / "index.html"))
+
+elif STATIC_DIR.exists():
+    # 回退：旧版静态 HTML
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+    @app.get("/", include_in_schema=False)
+    def root():
+        index = STATIC_DIR / "index.html"
+        return FileResponse(str(index)) if index.exists() else {"message": "RSI Bot API"}
 
-@app.get("/", include_in_schema=False)
-def root():
-    index = STATIC_DIR / "index.html"
-    if index.exists():
-        return FileResponse(str(index))
-    return {"message": "RSI Martin Trading Bot API"}
-
-
-@app.get("/{page}.html", include_in_schema=False)
-def serve_page(page: str):
-    allowed = {"login", "index", "trades", "stats", "settings", "rsi-scanner", "backtest"}
-    if page not in allowed:
-        raise HTTPException(404)
-    html_file = STATIC_DIR / f"{page}.html"
-    if not html_file.exists():
-        raise HTTPException(404)
-    return FileResponse(str(html_file))
+    @app.get("/{page}.html", include_in_schema=False)
+    def serve_page(page: str):
+        allowed = {"login", "index", "trades", "stats", "settings", "rsi-scanner", "backtest"}
+        if page not in allowed:
+            raise HTTPException(404)
+        html_file = STATIC_DIR / f"{page}.html"
+        if not html_file.exists():
+            raise HTTPException(404)
+        return FileResponse(str(html_file))
 
 
 # ── WebSocket ──────────────────────────────────────────────────────────────────
