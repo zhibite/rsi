@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from .config import settings, DEFAULT_PAIRS
 from .database import engine as db_engine, SessionLocal
@@ -96,6 +97,69 @@ async def _ws_broadcast_callback(user_id: int, data: dict):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=db_engine)
+    # Migrate: add pause_martin column if it doesn't exist yet
+    with db_engine.connect() as conn:
+        cols = [row[1] for row in conn.execute(text("PRAGMA table_info(pair_configs)"))]
+        if "pause_martin" not in cols:
+            conn.execute(text("ALTER TABLE pair_configs ADD COLUMN pause_martin BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+            logger.info("Migration: added pair_configs.pause_martin column")
+    with db_engine.connect() as conn:
+        cols = [row[1] for row in conn.execute(text("PRAGMA table_info(strategy_configs)"))]
+        if "max_total_exposure_usdt" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN max_total_exposure_usdt REAL NOT NULL DEFAULT 0.0"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.max_total_exposure_usdt column")
+        if "max_total_committed_usdt" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN max_total_committed_usdt REAL NOT NULL DEFAULT 0.0"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.max_total_committed_usdt column")
+        if "entry_interval_seconds" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN entry_interval_seconds INTEGER NOT NULL DEFAULT 0"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.entry_interval_seconds column")
+        if "low_balance_pct" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN low_balance_pct REAL NOT NULL DEFAULT 50.0"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.low_balance_pct column")
+        if "low_balance_min_profit_pct" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN low_balance_min_profit_pct REAL NOT NULL DEFAULT 0.6"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.low_balance_min_profit_pct column")
+        if "overbought_rsi_max" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN overbought_rsi_max REAL NOT NULL DEFAULT 85.0"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.overbought_rsi_max column")
+        if "overbought_profit_floor_pct" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN overbought_profit_floor_pct REAL NOT NULL DEFAULT 0.5"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.overbought_profit_floor_pct column")
+        if "pause_new_entries" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN pause_new_entries BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.pause_new_entries column")
+        if "take_profit_pct" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN take_profit_pct REAL NOT NULL DEFAULT 1.3"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.take_profit_pct column")
+        if "trailing_stop_pct" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN trailing_stop_pct REAL NOT NULL DEFAULT 0.3"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.trailing_stop_pct column")
+        if "double_first_order" not in cols:
+            conn.execute(text("ALTER TABLE strategy_configs ADD COLUMN double_first_order BOOLEAN NOT NULL DEFAULT 1"))
+            conn.commit()
+            logger.info("Migration: added strategy_configs.double_first_order column")
+    with db_engine.connect() as conn:
+        cols = [row[1] for row in conn.execute(text("PRAGMA table_info(pair_configs)"))]
+        if "take_profit_pct" not in cols:
+            conn.execute(text("ALTER TABLE pair_configs ADD COLUMN take_profit_pct REAL NOT NULL DEFAULT 1.3"))
+            conn.commit()
+            logger.info("Migration: added pair_configs.take_profit_pct column")
+        if "trailing_stop_pct" not in cols:
+            conn.execute(text("ALTER TABLE pair_configs ADD COLUMN trailing_stop_pct REAL NOT NULL DEFAULT 0.3"))
+            conn.commit()
+            logger.info("Migration: added pair_configs.trailing_stop_pct column")
     logger.info("Database tables created/verified")
 
     # Wire up WebSocket broadcast to the trading engine
@@ -182,11 +246,13 @@ app.include_router(stats_router.router)
 app.include_router(backtest_router.router)
 
 # ── Static frontend ────────────────────────────────────────────────────────────
-# Vue SPA (frontend/dist/) 优先，旧 static/ 作为备用
+# 通过 USE_VUE_FRONTEND 环境变量切换前端：
+#   true  → Vue SPA (frontend/dist/)
+#   false → 旧版静态 HTML (static/)
 DIST_DIR   = Path(__file__).parent.parent / "frontend" / "dist"
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
-if DIST_DIR.exists():
+if settings.USE_VUE_FRONTEND and DIST_DIR.exists():
     # 托管 Vue build 产物（assets/、icons/ 等静态资源）
     app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
     app.mount("/icons",  StaticFiles(directory=str(DIST_DIR / "icons")),  name="icons")

@@ -43,8 +43,15 @@ def get_summary(
         for p in closed
     )
 
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_pnl = sum(
+        p.realized_pnl for p in closed
+        if p.closed_at and p.closed_at >= today_start
+    )
+
     return StatsSummary(
         total_pnl=round(total_pnl, 4),
+        today_pnl=round(today_pnl, 4),
         total_trades=total_trades,
         win_trades=win_trades,
         loss_trades=loss_trades,

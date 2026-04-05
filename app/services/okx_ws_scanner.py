@@ -35,6 +35,9 @@ class OKXWSScanner:
         self.prices: dict[str, float] = {}       # 最新价格
         self.volume_rank: dict[str, float] = {}  # 24h 交易量排名用
 
+        self.confirmed_rsi_values: dict[str, float] = {}
+        self.volume_rank: dict[str, float] = {}
+
         self._pairs: set[str] = set()
         self._pending_pairs: set[str] = set()  # 新增但还未加载历史+订阅的币
         self._running = False
@@ -94,6 +97,7 @@ class OKXWSScanner:
                 "symbol": sym,
                 "rsi": round(float(rsi), 2),
                 "price": float(self.prices.get(sym, 0.0)),
+                "volume": float(self.volume_rank.get(sym, 0.0)),
             })
         items.sort(key=lambda x: x["rsi"])
         return items[:top_n] if top_n else items
@@ -153,9 +157,12 @@ class OKXWSScanner:
             buf.extend(confirmed[-BUFFER_SIZE:])
             self._live_close[sym] = float(bars[-1][4])
             self.prices[sym] = float(bars[-1][4])
-            rsi = self._calc_rsi(sym, include_live=True)
-            if rsi is not None:
-                self.rsi_values[sym] = rsi
+            confirmed_rsi = self._calc_rsi(sym, include_live=False)
+            if confirmed_rsi is not None:
+                self.confirmed_rsi_values[sym] = confirmed_rsi
+            live_rsi = self._calc_rsi(sym, include_live=True)
+            if live_rsi is not None:
+                self.rsi_values[sym] = live_rsi
                 done += 1
         return done
 
@@ -331,12 +338,15 @@ class OKXWSScanner:
                 buf = self._closes.setdefault(symbol, deque(maxlen=BUFFER_SIZE))
                 buf.append(close)
                 self._live_close.pop(symbol, None)
+                confirmed_rsi = self._calc_rsi(symbol, include_live=False)
+                if confirmed_rsi is not None:
+                    self.confirmed_rsi_values[symbol] = confirmed_rsi
             else:
                 self._live_close[symbol] = close
 
-            rsi = self._calc_rsi(symbol, include_live=True)
-            if rsi is not None:
-                self.rsi_values[symbol] = rsi
+            live_rsi = self._calc_rsi(symbol, include_live=True)
+            if live_rsi is not None:
+                self.rsi_values[symbol] = live_rsi
 
 
 # ── 全局单例 ───────────────────────────────────────────────────────────────────

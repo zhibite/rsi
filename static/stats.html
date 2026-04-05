@@ -12,6 +12,17 @@
     .nav-item { transition: all 0.15s; }
     .nav-item:hover, .nav-item.active { background: rgba(99,102,241,0.15); color: #818cf8; }
     .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
+    /* ── Mobile nav ── */
+    .mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; z-index:100; background:#1e293b; border-top:1px solid #334155; height:56px; align-items:stretch; }
+    .mobile-nav a { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:10px; color:#64748b; text-decoration:none; transition:color 0.15s; }
+    .mobile-nav a.active { color:#818cf8; }
+    .mobile-nav a .mn-icon { font-size:20px; line-height:1; }
+    @media (max-width: 767px) {
+      aside.sidebar { display:none !important; }
+      main { margin-left:0 !important; padding:12px !important; padding-bottom:68px !important; }
+      .mobile-nav { display:flex !important; }
+      .grid.grid-cols-1.lg\:grid-cols-3 { grid-template-columns:1fr !important; }
+    }
   </style>
 </head>
 <body class="flex min-h-screen">
@@ -24,7 +35,7 @@
     <div class="text-xs text-slate-500 mt-0.5">量化交易平台</div>
   </div>
   <nav class="flex-1 space-y-1">
-    <a href="/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>🏠</span> 仪表板</a>
+    <a href="/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>🏠</span> 策略运行</a>
     <a href="/rsi-scanner.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>🔍</span> RSI 扫描</a>
     <a href="/trades.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>📋</span> 交易记录</a>
     <a href="/stats.html" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium"><span>📊</span> 盈利统计</a>
@@ -96,6 +107,15 @@
 
   </div>
 </main>
+
+<!-- Bottom mobile nav -->
+<nav class="mobile-nav">
+  <a href="/"><span class="mn-icon">🏠</span><span>主页</span></a>
+  <a href="/rsi-scanner.html"><span class="mn-icon">🔍</span><span>扫描</span></a>
+  <a href="/trades.html"><span class="mn-icon">📋</span><span>记录</span></a>
+  <a href="/stats.html" class="active"><span class="mn-icon">📊</span><span>统计</span></a>
+  <a href="/settings.html"><span class="mn-icon">⚙️</span><span>配置</span></a>
+</nav>
 
 <script>
   let token = localStorage.getItem('token');

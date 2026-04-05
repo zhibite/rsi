@@ -8,24 +8,24 @@ from pydantic import BaseModel, EmailStr
 class PairConfigCreate(BaseModel):
     symbol: str
     is_enabled: bool = True
+    pause_martin: bool = False
     first_order_amount: float = 20.0
     martin_multiplier: float = 2.0
     max_martin_levels: int = 5
     grid_drops: List[float] = [1.0, 2.0, 3.0, 4.0, 5.0]
     take_profit_pct: float = 1.3
     trailing_stop_pct: float = 0.3
-    replenishment_retracement_pct: float = 0.3
 
 
 class PairConfigUpdate(BaseModel):
     is_enabled: Optional[bool] = None
+    pause_martin: Optional[bool] = None
     first_order_amount: Optional[float] = None
     martin_multiplier: Optional[float] = None
     max_martin_levels: Optional[int] = None
     grid_drops: Optional[List[float]] = None
     take_profit_pct: Optional[float] = None
     trailing_stop_pct: Optional[float] = None
-    replenishment_retracement_pct: Optional[float] = None
 
 
 class PairConfigOut(PairConfigCreate):
@@ -104,24 +104,31 @@ class StrategyConfigCreate(BaseModel):
     pairs: List[str] = []
     first_order_amount: float = 20.0
     martin_multiplier: float = 2.0
-    take_profit_pct: float = 1.3
-    trailing_stop_pct: float = 0.3
-    replenishment_retracement_pct: float = 0.3
     rsi_overbought: float = 70.0
     overbought_min_profit_pct: float = 1.0
     overbought_rsi_step: float = 2.0
-    overbought_profit_step: float = 0.1
+    overbought_rsi_max: float = 85.0
+    overbought_profit_floor_pct: float = 0.5
     grid_drops: List[float] = [1.0, 2.0, 3.0, 4.0, 5.0]
     rsi_period: int = 14
     rsi_oversold: float = 30.0
     max_martin_levels: int = 5
     max_open_positions: int = 5
+    max_total_exposure_usdt: float = 0.0
+    max_total_committed_usdt: float = 0.0
     scan_interval: int = 1
     max_loss_pct: Optional[float] = None
     martin_cooldown_seconds: int = 0
+    entry_interval_seconds: int = 0
+    low_balance_pct: float = 50.0
+    low_balance_min_profit_pct: float = 0.6
     btc_drop_pct: float = 5.0
     btc_drop_minutes: int = 15
     btc_pause_minutes: int = 60
+    pause_new_entries: bool = False
+    take_profit_pct: float = 1.3
+    trailing_stop_pct: float = 0.3
+    double_first_order: bool = True
 
 
 class StrategyConfigOut(BaseModel):
@@ -129,25 +136,32 @@ class StrategyConfigOut(BaseModel):
     pairs: List[str]
     first_order_amount: float
     martin_multiplier: float
-    take_profit_pct: float
-    trailing_stop_pct: float
-    replenishment_retracement_pct: float
     rsi_overbought: float
     overbought_min_profit_pct: float
     overbought_rsi_step: float
-    overbought_profit_step: float
+    overbought_rsi_max: float
+    overbought_profit_floor_pct: float
     grid_drops: List[float]
     rsi_period: int
     rsi_oversold: float
     max_martin_levels: int
     max_open_positions: int
+    max_total_exposure_usdt: float
+    max_total_committed_usdt: float
     is_enabled: bool
     scan_interval: int
     max_loss_pct: Optional[float] = None
     martin_cooldown_seconds: int
+    entry_interval_seconds: int
+    low_balance_pct: float
+    low_balance_min_profit_pct: float
     btc_drop_pct: float
     btc_drop_minutes: int
     btc_pause_minutes: int
+    pause_new_entries: bool
+    take_profit_pct: float
+    trailing_stop_pct: float
+    double_first_order: bool
     created_at: datetime
     updated_at: datetime
 
@@ -204,6 +218,7 @@ class PositionOut(BaseModel):
 
 class StatsSummary(BaseModel):
     total_pnl: float
+    today_pnl: float
     total_trades: int
     win_trades: int
     loss_trades: int

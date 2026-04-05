@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = ""
     # Set to false in .env to close public registration
     ALLOW_REGISTER: bool = True
+    # true = Vue SPA (frontend/dist/)；false = 旧版静态 HTML (static/)
+    USE_VUE_FRONTEND: bool = True
 
     class Config:
         env_file = ".env"

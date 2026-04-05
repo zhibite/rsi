@@ -50,24 +50,33 @@ class StrategyConfig(Base):
     take_profit_pct = Column(Float, default=1.3)          # % above avg cost to activate trailing
     trailing_stop_pct = Column(Float, default=0.3)        # % drawdown from peak to sell
     replenishment_retracement_pct = Column(Float, default=0.3)  # 补仓前从谷底反弹的幅度 %（0=立即补仓）
-    rsi_overbought = Column(Float, default=70.0)           # 超买立即止盈 RSI 基准阈值 (L0)
-    overbought_min_profit_pct = Column(Float, default=1.0) # 超买止盈最低净利润 % (L0)
-    overbought_rsi_step = Column(Float, default=2.0)       # 每层 RSI 阈值降低步长
-    overbought_profit_step = Column(Float, default=0.1)    # 每层最低利润降低步长 %
+    rsi_overbought = Column(Float, default=70.0)              # 超买止盈 RSI 基准阈值 (L0)
+    overbought_min_profit_pct = Column(Float, default=1.0)   # RSI 刚过阈值时要求的最低净利润 %
+    overbought_rsi_step = Column(Float, default=2.0)          # 每层 RSI 阈值降低步长
+    overbought_profit_step = Column(Float, default=0.1)       # 每层最低利润降低步长 % (已废弃，保留兼容)
+    overbought_rsi_max = Column(Float, default=85.0)          # RSI 极度超买上限：达到此值时利润要求降至下限
+    overbought_profit_floor_pct = Column(Float, default=0.5)  # RSI 极度超买时的利润下限 %
     # Price-drop % triggers for each Martingale level (list of 5 floats)
     grid_drops = Column(JSON, default=[1.0, 2.0, 3.0, 4.0, 5.0])
     rsi_period = Column(Integer, default=14)
     rsi_oversold = Column(Float, default=30.0)
     max_martin_levels = Column(Integer, default=5)
     max_open_positions = Column(Integer, default=5)  # B方案：最多同时持仓数
+    max_total_exposure_usdt = Column(Float, default=0.0)   # 当前所有持仓已投入资金上限，0=关闭
+    max_total_committed_usdt = Column(Float, default=0.0)  # 当前持仓+剩余马丁预算的总承诺上限，0=关闭
     is_enabled = Column(Boolean, default=False)
     scan_interval = Column(Integer, default=2)              # seconds between scans
     # ── 风险控制参数 ──────────────────────────────────────────────────────────
     max_loss_pct = Column(Float, nullable=True)             # 硬止损: 浮亏达此% 强制平仓 (None=关闭)
     martin_cooldown_seconds = Column(Integer, default=0)    # 补仓冷却: 两次补仓最小间隔秒数 (0=不限)
+    entry_interval_seconds = Column(Integer, default=0)     # 开单间隔: 全局两次新开仓最小间隔秒数 (0=不限)
+    low_balance_pct = Column(Float, default=50.0)           # 低余额阈值: 剩余余额低于此%时触发冷却/限频/强制止盈 (0=关闭)
+    low_balance_min_profit_pct = Column(Float, default=0.6) # 低余额强制止盈最低利润 % (低余额模式下专用阈值)
     btc_drop_pct = Column(Float, default=5.0)               # BTC熔断: 监测窗口内跌幅触发阈值 %
     btc_drop_minutes = Column(Integer, default=15)          # BTC熔断: 监测窗口时长 (分钟)
     btc_pause_minutes = Column(Integer, default=60)         # BTC熔断: 触发后暂停开新仓时长 (分钟, 0=关闭)
+    pause_new_entries = Column(Boolean, default=False)      # 停止开新仓: 暂停所有新仓信号，已持仓继续运行
+    double_first_order = Column(Boolean, default=True)      # 首单加倍: 实际首单 = first_order_amount * 2，马丁链不变
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -81,6 +90,7 @@ class PairConfig(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     symbol = Column(String(50), nullable=False)
     is_enabled = Column(Boolean, default=True)
+    pause_martin = Column(Boolean, default=False)
     first_order_amount = Column(Float, default=20.0)
     martin_multiplier = Column(Float, default=2.0)
     max_martin_levels = Column(Integer, default=5)

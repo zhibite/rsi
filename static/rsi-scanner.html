@@ -21,6 +21,17 @@
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: #1e293b; }
     ::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+    /* ── Mobile nav ── */
+    .mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; z-index:100; background:#1e293b; border-top:1px solid #334155; height:56px; align-items:stretch; }
+    .mobile-nav a { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:10px; color:#64748b; text-decoration:none; transition:color 0.15s; }
+    .mobile-nav a.active { color:#818cf8; }
+    .mobile-nav a .mn-icon { font-size:20px; line-height:1; }
+    @media (max-width: 767px) {
+      aside.sidebar { display:none !important; }
+      main { margin-left:0 !important; padding:12px !important; padding-bottom:68px !important; }
+      .mobile-nav { display:flex !important; }
+      .flex.flex-wrap.items-center.gap-3 { flex-wrap:wrap; gap:8px !important; }
+    }
   </style>
 </head>
 <body class="flex min-h-screen">
@@ -35,8 +46,8 @@
   </div>
   <nav class="flex-1 space-y-1">
     <a href="/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
-      <span>🏠</span> 仪表板
-    </a>
+      <span>🏠</span> 策略运行
+</a>
     <a href="/rsi-scanner.html" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium">
       <span>🔍</span> RSI 扫描
     </a>
@@ -130,6 +141,15 @@
 
   </div>
 </main>
+
+<!-- Bottom mobile nav -->
+<nav class="mobile-nav">
+  <a href="/"><span class="mn-icon">🏠</span><span>主页</span></a>
+  <a href="/rsi-scanner.html" class="active"><span class="mn-icon">🔍</span><span>扫描</span></a>
+  <a href="/trades.html"><span class="mn-icon">📋</span><span>记录</span></a>
+  <a href="/stats.html"><span class="mn-icon">📊</span><span>统计</span></a>
+  <a href="/settings.html"><span class="mn-icon">⚙️</span><span>配置</span></a>
+</nav>
 
 <script>
   let token = localStorage.getItem('token');
@@ -270,7 +290,7 @@
               return `
                 <tr class="hover:bg-slate-800/40">
                   <td class="py-1.5 text-slate-500">${offset + idx + 1}</td>
-                  <td class="py-1.5 font-medium text-white">${base}</td>
+                  <td class="py-1.5 font-medium"><a href="https://www.okx.com/trade-spot/${it.symbol.replace('/', '-').toLowerCase()}" target="_blank" rel="noopener" class="text-white hover:text-indigo-300 transition-colors">${base}</a></td>
                   <td class="py-1.5 text-slate-300">${price}</td>
                   <td class="py-1.5">
                     <div class="flex items-center gap-2">

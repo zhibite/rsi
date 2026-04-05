@@ -28,9 +28,25 @@
     .toggle-slider:before { content: ""; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: 0.2s; }
     input:checked + .toggle-slider { background: #6366f1; }
     input:checked + .toggle-slider:before { transform: translateX(16px); }
+    .toggle-warn input:checked + .toggle-slider { background: #f59e0b; }
     .chip { display: inline-flex; align-items: center; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3);
       color: #a5b4fc; border-radius: 6px; padding: 3px 10px; font-size: 11px; cursor: pointer; transition: all 0.15s; }
     .chip:hover { background: rgba(99,102,241,0.25); border-color: #6366f1; color: #fff; }
+    /* ── Mobile nav ── */
+    .mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; z-index:100; background:#1e293b; border-top:1px solid #334155; height:56px; align-items:stretch; }
+    .mobile-nav a { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:10px; color:#64748b; text-decoration:none; transition:color 0.15s; }
+    .mobile-nav a.active { color:#818cf8; }
+    .mobile-nav a .mn-icon { font-size:20px; line-height:1; }
+    @media (max-width: 767px) {
+      aside.sidebar { display:none !important; }
+      main { margin-left:0 !important; padding:12px !important; padding-bottom:68px !important; }
+      .mobile-nav { display:flex !important; }
+      #pairs-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      #pairs-table-wrap table { min-width:560px; }
+      .grid.grid-cols-2.lg\:grid-cols-4 { grid-template-columns:repeat(2,1fr) !important; }
+      .grid.grid-cols-2.lg\:grid-cols-3 { grid-template-columns:repeat(2,1fr) !important; }
+      .toast { right:12px !important; left:12px !important; bottom:68px !important; }
+    }
   </style>
 </head>
 <body class="flex min-h-screen">
@@ -41,7 +57,7 @@
     <div class="text-xs text-slate-500 mt-0.5">量化交易平台</div>
   </div>
   <nav class="flex-1 space-y-1">
-    <a href="/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>🏠</span> 仪表板</a>
+    <a href="/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>🏠</span> 策略运行</a>
     <a href="/rsi-scanner.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>🔍</span> RSI 扫描</a>
     <a href="/trades.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>📋</span> 交易记录</a>
     <a href="/stats.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400"><span>📊</span> 盈利统计</a>
@@ -119,37 +135,45 @@
 
         <!-- 超买止盈参数 -->
         <div class="bg-slate-900 border border-slate-700 rounded-xl p-4 mb-5">
-          <div class="text-xs font-medium text-slate-300 mb-3">超买立即止盈参数（RSI 达到阈值时直接卖出）</div>
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="text-xs font-medium text-slate-300 mb-1">止盈参数 <span class="font-normal text-slate-500">— RSI 超买 + 动态利润门槛（RSI 越强，所需利润越低）</span></div>
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mt-3">
             <div>
-              <label title="L0 超买 RSI 基准阈值，例如 70">RSI 超买基准 (L0)</label>
+              <label title="L0 超买 RSI 基准阈值，例如 70；每深一个马丁层级自动降低">RSI 超买基准 (L0)</label>
               <input id="s-rsi-over" type="number" step="1" min="50" max="90" value="70" />
             </div>
             <div>
-              <label title="每深一个马丁层级，RSI 阈值降低的步长；默认 2，即 L1=68, L2=66...">每层 RSI 步长 (-)</label>
+              <label title="每深一个马丁层级，RSI 超买阈值降低的步长；默认 2，即 L1=68, L2=66...">每层 RSI 步长</label>
               <input id="s-rsi-step" type="number" step="0.5" min="0" max="10" value="2" />
             </div>
             <div>
-              <label title="L0 要求的最低净利润（扣双边手续费后），默认 1%">最低净利润基准 % (L0)</label>
+              <label title="RSI 刚过超买阈值时要求的最低净利润（已扣手续费）；RSI 越强此要求线性递减至利润下限">利润上限 %</label>
               <input id="s-profit-min" type="number" step="0.1" min="0.3" max="5" value="1.0" />
             </div>
             <div>
-              <label title="每深一个马丁层级，最低利润要求降低的步长；默认 0.1%，最低不低于 0.3%">每层利润步长 (-%) </label>
-              <input id="s-profit-step" type="number" step="0.05" min="0" max="1" value="0.1" />
+              <label title="RSI 达到极值上限时利润要求降至此值；RSI 在超买阈值到极值之间线性插值">利润下限 %</label>
+              <input id="s-profit-floor" type="number" step="0.1" min="0.1" max="3" value="0.5" />
+            </div>
+            <div>
+              <label title="RSI 达到此极值时利润要求降至下限，超过后维持下限不再继续降">RSI 极值</label>
+              <input id="s-rsi-max" type="number" step="1" min="70" max="100" value="85" />
             </div>
           </div>
           <div class="mt-3 text-xs text-slate-500" id="overbought-preview"></div>
         </div>
 
         <div class="bg-slate-900 border border-slate-700 rounded-xl p-4 mb-5">
-          <div class="text-xs font-medium text-slate-300 mb-3">新增交易对时的默认参数（可在交易对管理中单独覆盖）</div>
+          <div class="text-xs font-medium text-slate-300 mb-3">新增交易对时的默认参数（只影响新加交易对，不会再自动覆盖已有币对）</div>
           <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-            <div><label>首单金额 (USDT)</label><input id="s-first" type="number" step="1" min="5" value="20" /></div>
+            <div>
+              <label>首单金额 (USDT)</label>
+              <input id="s-first" type="number" step="1" min="5" value="20" />
+              <label class="inline-flex items-center gap-2 mt-2 cursor-pointer select-none" title="开启后实际首单金额翻倍，马丁补仓金额不变">
+                <input type="checkbox" id="s-double-first" checked class="accent-indigo-500 w-3.5 h-3.5" />
+                <span class="text-xs text-slate-400">开启首单加倍</span>
+              </label>
+            </div>
             <div><label>马丁倍数</label><input id="s-mult" type="number" step="0.1" min="1.1" value="2" /></div>
             <div><label>最大补仓次数</label><input id="s-maxm" type="number" step="1" min="1" max="10" value="5" /></div>
-            <div><label>止盈启动线 (%)</label><input id="s-tp" type="number" step="0.1" min="0.1" value="1.3" /></div>
-            <div><label>追踪止盈回撤 (%)</label><input id="s-trail" type="number" step="0.05" min="0.05" value="0.3" /></div>
-            <div><label>补仓回撤 (%)</label><input id="s-retrace" type="number" step="0.05" min="0" value="0.3" /></div>
           </div>
           <div>
             <label class="text-xs text-white font-medium block mb-2">默认补仓跌幅梯度 (%, 共 <span id="grid-count">5</span> 档)</label>
@@ -157,17 +181,67 @@
           </div>
         </div>
 
+        <!-- 追踪止盈默认参数 -->
+        <div class="bg-slate-900 border border-slate-700 rounded-xl p-4 mb-5">
+          <div class="text-xs font-medium text-slate-300 mb-1">追踪止盈默认参数 <span class="font-normal text-slate-500">— 新增交易对时的默认值，可在交易对编辑中单独覆盖</span></div>
+          <div class="grid grid-cols-2 gap-4 mt-3">
+            <div>
+              <label title="持仓浮盈达到此百分比时启动追踪止盈机制">追踪激活利润 (%)</label>
+              <input id="s-take-profit" type="number" step="0.1" min="0.1" max="20" value="1.3" />
+            </div>
+            <div>
+              <label title="追踪止盈激活后，价格从最高点回撤此百分比时触发卖出">回撤止盈触发 (%)</label>
+              <input id="s-trailing-stop" type="number" step="0.1" min="0.1" max="10" value="0.3" />
+            </div>
+          </div>
+        </div>
+
         <!-- 风险控制参数 -->
         <div class="bg-slate-900 border border-red-900/40 rounded-xl p-4 mb-5">
           <div class="text-xs font-medium text-red-400 mb-3">⚠️ 风险控制参数</div>
+
+          <!-- 低余额模式 -->
+          <div class="bg-amber-950/30 border border-amber-700/40 rounded-lg p-3 mb-4">
+            <div class="text-xs font-medium text-amber-400 mb-2">💰 低余额风控模式（剩余可用余额低于阈值时同时触发以下三项）</div>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
+              <div>
+                <label title="剩余可用 USDT 占总资金（可用+持仓）的比例低于此值时，进入低余额模式；0=关闭">剩余余额触发阈值 % (0=关闭)</label>
+                <input id="s-low-balance-pct" type="number" step="5" min="0" max="100" value="50" placeholder="如 50" />
+              </div>
+              <div>
+                <label title="低余额模式下强制止盈的专用最低利润；比 RSI 超买止盈门槛更低，方便快速回收资金">强制止盈最低利润 % (低余额专用)</label>
+                <input id="s-low-balance-min-profit" type="number" step="0.1" min="0.1" max="5" value="0.6" placeholder="如 0.6" />
+              </div>
+              <div>
+                <label title="低余额模式下，两次马丁补仓之间的最短等待时间（秒）；正常余额时不限速；0=不限">补仓冷却时间 (秒, 低余额时生效)</label>
+                <input id="s-cooldown" type="number" step="30" min="0" value="300" placeholder="如 300" />
+              </div>
+              <div>
+                <label title="低余额模式下，两次新开仓之间的最短间隔（秒）；正常余额时不限速；0=不限">开单间隔 (秒, 低余额时生效)</label>
+                <input id="s-entry-interval" type="number" step="10" min="0" max="3600" value="0" placeholder="如 60" />
+              </div>
+            </div>
+            <div class="text-xs text-amber-600/80">
+              低余额模式同时触发：① 补仓冷却限速　② 新开单限频　③ 利润≥强制止盈阈值时立即卖出（不等 RSI 超买），尽快回收资金降低风险
+            </div>
+          </div>
+
+          <div class="text-xs text-amber-500/90 -mt-2 mb-4">
+            风险控制已调整：补仓冷却和开单间隔现在常规生效；低余额模式只额外负责快速止盈。
+          </div>
+
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label title="持仓浮亏超过此百分比时强制平仓止损；0 或留空表示关闭此功能">硬止损浮亏 % (0=关闭)</label>
               <input id="s-max-loss" type="number" step="0.5" min="0" max="100" value="15" placeholder="如 20" />
             </div>
             <div>
-              <label title="两次马丁补仓之间的最短等待时间（秒），防止连续快速下跌时过早补仓；0=不限制">补仓冷却时间 (秒)</label>
-              <input id="s-cooldown" type="number" step="30" min="0" value="300" placeholder="如 300" />
+              <label title="所有开放仓位当前已投入资金之和的上限；超过后不再允许新开仓或继续补仓；0=关闭">组合已投入上限 (USDT)</label>
+              <input id="s-max-total-exposure" type="number" step="10" min="0" value="0" placeholder="如 1000" />
+            </div>
+            <div>
+              <label title="所有开放仓位当前已投入 + 剩余马丁预算的总承诺上限；超过后不再允许新开仓；0=关闭">组合总承诺上限 (USDT)</label>
+              <input id="s-max-total-committed" type="number" step="10" min="0" value="0" placeholder="如 2000" />
             </div>
             <div>
               <label title="BTC 在监测窗口内下跌超过此百分比时触发熔断，暂停所有新开仓；0=关闭熔断">BTC 熔断跌幅 % (0=关闭)</label>
@@ -183,7 +257,7 @@
             </div>
           </div>
           <div class="mt-3 text-xs text-slate-500">
-            硬止损和BTC熔断均实时生效，无需重启Bot。熔断期间已有持仓正常管理，仅暂停新开仓。
+            硬止损和BTC熔断均实时生效，无需重启Bot。熔断期间已有持仓正常管理（RSI超买仍可止盈），仅暂停新开仓。
           </div>
         </div>
 
@@ -214,13 +288,20 @@
       <div><label>首单金额 (USDT)</label><input id="m-first" type="number" step="1" min="5" value="20" /></div>
       <div><label>马丁倍数</label><input id="m-mult" type="number" step="0.1" min="1.1" value="2" /></div>
       <div><label>最大补仓次数</label><input id="m-maxm" type="number" step="1" min="1" max="10" value="5" /></div>
-      <div><label>止盈启动线 (%)</label><input id="m-tp" type="number" step="0.1" min="0.1" value="1.3" /></div>
-      <div><label>追踪止盈回撤 (%)</label><input id="m-trail" type="number" step="0.05" min="0.05" value="0.3" /></div>
-      <div><label>补仓回撤 (%)</label><input id="m-retrace" type="number" step="0.05" min="0" value="0.3" /></div>
     </div>
     <div class="mb-5">
       <label class="text-xs text-white font-medium block mb-2">补仓跌幅梯度 (%, 共 <span id="m-grid-count">5</span> 档)</label>
       <div id="m-grid-drops" class="flex gap-3 flex-wrap"></div>
+    </div>
+    <div class="grid grid-cols-2 gap-4 mb-5">
+      <div>
+        <label>追踪激活利润 (%)</label>
+        <input id="m-take-profit" type="number" step="0.1" min="0.1" value="1.3" title="利润达到此百分比时启动追踪止盈" />
+      </div>
+      <div>
+        <label>回撤止盈 (%)</label>
+        <input id="m-trailing-stop" type="number" step="0.1" min="0.1" value="0.3" title="从最高点回撤此百分比时触发卖出" />
+      </div>
     </div>
     <input type="hidden" id="m-pair-id" value="" />
     <div class="flex gap-3">
@@ -231,6 +312,15 @@
 </div>
 
 <div id="toast" class="toast"></div>
+
+<!-- Bottom mobile nav -->
+<nav class="mobile-nav">
+  <a href="/"><span class="mn-icon">🏠</span><span>主页</span></a>
+  <a href="/rsi-scanner.html"><span class="mn-icon">🔍</span><span>扫描</span></a>
+  <a href="/trades.html"><span class="mn-icon">📋</span><span>记录</span></a>
+  <a href="/stats.html"><span class="mn-icon">📊</span><span>统计</span></a>
+  <a href="/settings.html" class="active"><span class="mn-icon">⚙️</span><span>配置</span></a>
+</nav>
 
 <script>
   let token = localStorage.getItem('token');
@@ -355,10 +445,11 @@
             <th class="text-right pb-2 pr-3">首单(U)</th>
             <th class="text-right pb-2 pr-3">倍数</th>
             <th class="text-right pb-2 pr-3">补仓层</th>
-            <th class="text-right pb-2 pr-3">止盈%</th>
-            <th class="text-right pb-2 pr-3">追踪%</th>
             <th class="text-right pb-2 pr-3">精度</th>
+            <th class="text-right pb-2 pr-3" title="利润达到此百分比时启动追踪止盈">止盈%</th>
+            <th class="text-right pb-2 pr-3" title="从最高点回撤此百分比时卖出">回撤%</th>
             <th class="text-center pb-2 pr-3">启用</th>
+            <th class="text-center pb-2 pr-3" title="暂停后不再追加马丁补仓，但 RSI 超买止盈和硬止损仍正常运行">暂停补仓</th>
             <th class="text-right pb-2">操作</th>
           </tr>
         </thead>
@@ -369,12 +460,16 @@
               <td class="py-2 pr-3 text-right text-slate-300">${p.first_order_amount.toFixed(0)}</td>
               <td class="py-2 pr-3 text-right text-slate-300">${p.martin_multiplier}x</td>
               <td class="py-2 pr-3 text-right text-slate-300">${p.max_martin_levels}</td>
-              <td class="py-2 pr-3 text-right text-slate-300">${p.take_profit_pct}%</td>
-              <td class="py-2 pr-3 text-right text-slate-300">${p.trailing_stop_pct}%</td>
               <td class="py-2 pr-3 text-right ${p.lot_sz ? 'text-emerald-400' : 'text-slate-600'}">${p.lot_sz ?? '-'}</td>
+              <td class="py-2 pr-3 text-right text-emerald-400">${(p.take_profit_pct ?? 1.3).toFixed(1)}</td>
+              <td class="py-2 pr-3 text-right text-sky-400">${(p.trailing_stop_pct ?? 0.3).toFixed(1)}</td>
               <td class="py-2 pr-3 text-center">
                 <label class="toggle"><input type="checkbox" ${p.is_enabled ? 'checked' : ''}
                   onchange="togglePair(${p.id}, this.checked)"><span class="toggle-slider"></span></label>
+              </td>
+              <td class="py-2 pr-3 text-center">
+                <label class="toggle toggle-warn"><input type="checkbox" ${p.pause_martin ? 'checked' : ''}
+                  onchange="togglePauseMarten(${p.id}, this.checked)"><span class="toggle-slider"></span></label>
               </td>
               <td class="py-2 text-right whitespace-nowrap">
                 <button onclick="openPairModal(${p.id})" class="text-indigo-400 hover:text-indigo-300 mr-2">编辑</button>
@@ -389,6 +484,12 @@
   async function togglePair(id, enabled) {
     await api(`/api/trading/pairs/${id}`, { method: 'PUT', body: JSON.stringify({ is_enabled: enabled }) });
     toast(enabled ? '已启用' : '已禁用');
+    await loadPairs();
+  }
+
+  async function togglePauseMarten(id, paused) {
+    await api(`/api/trading/pairs/${id}`, { method: 'PUT', body: JSON.stringify({ pause_martin: paused }) });
+    toast(paused ? '⏸ 已暂停补仓（止盈继续运行）' : '▶ 已恢复补仓');
     await loadPairs();
   }
 
@@ -452,10 +553,9 @@
       document.getElementById('m-first').value = p.first_order_amount;
       document.getElementById('m-mult').value = p.martin_multiplier;
       document.getElementById('m-maxm').value = p.max_martin_levels;
-      document.getElementById('m-tp').value = p.take_profit_pct;
-      document.getElementById('m-trail').value = p.trailing_stop_pct;
-      document.getElementById('m-retrace').value = p.replenishment_retracement_pct;
       renderModalGridDrops(p.max_martin_levels, p.grid_drops);
+      document.getElementById('m-take-profit').value = p.take_profit_pct ?? 1.3;
+      document.getElementById('m-trailing-stop').value = p.trailing_stop_pct ?? 0.3;
     } else {
       // Pre-fill from global defaults
       symInput.value = prefillSymbol || '';
@@ -463,14 +563,13 @@
       document.getElementById('m-mult').value = document.getElementById('s-mult').value;
       const maxm = parseInt(document.getElementById('s-maxm').value) || 5;
       document.getElementById('m-maxm').value = maxm;
-      document.getElementById('m-tp').value = document.getElementById('s-tp').value;
-      document.getElementById('m-trail').value = document.getElementById('s-trail').value;
-      document.getElementById('m-retrace').value = document.getElementById('s-retrace').value;
       const globalDrops = Array.from({length: maxm}, (_, i) => {
         const el = document.getElementById(`grid-${i}`);
         return el ? parseFloat(el.value) : (i + 1);
       });
       renderModalGridDrops(maxm, globalDrops);
+      document.getElementById('m-take-profit').value = document.getElementById('s-take-profit').value || 1.3;
+      document.getElementById('m-trailing-stop').value = document.getElementById('s-trailing-stop').value || 0.3;
     }
 
     document.getElementById('pair-modal').classList.remove('hidden');
@@ -510,10 +609,9 @@
       first_order_amount: parseFloat(document.getElementById('m-first').value),
       martin_multiplier: parseFloat(document.getElementById('m-mult').value),
       max_martin_levels: maxm,
-      take_profit_pct: parseFloat(document.getElementById('m-tp').value),
-      trailing_stop_pct: parseFloat(document.getElementById('m-trail').value),
-      replenishment_retracement_pct: parseFloat(document.getElementById('m-retrace').value),
       grid_drops,
+      take_profit_pct: parseFloat(document.getElementById('m-take-profit').value) || 1.3,
+      trailing_stop_pct: parseFloat(document.getElementById('m-trailing-stop').value) || 0.3,
     };
     if (!body.symbol) { toast('请输入交易对', true); return; }
 
@@ -554,21 +652,27 @@
       document.getElementById('s-rsi-over').value = cfg.rsi_overbought ?? 70;
       document.getElementById('s-rsi-step').value = cfg.overbought_rsi_step ?? 2;
       document.getElementById('s-profit-min').value = cfg.overbought_min_profit_pct ?? 1.0;
-      document.getElementById('s-profit-step').value = cfg.overbought_profit_step ?? 0.1;
+      document.getElementById('s-profit-floor').value = cfg.overbought_profit_floor_pct ?? 0.5;
+      document.getElementById('s-rsi-max').value = cfg.overbought_rsi_max ?? 85;
       document.getElementById('s-rsi-period').value = cfg.rsi_period ?? 14;
       document.getElementById('s-interval').value = cfg.scan_interval ?? 2;
       document.getElementById('s-maxpos').value = cfg.max_open_positions ?? 5;
       document.getElementById('s-first').value = cfg.first_order_amount ?? 20;
       document.getElementById('s-mult').value = cfg.martin_multiplier ?? 2;
       document.getElementById('s-maxm').value = cfg.max_martin_levels ?? 5;
-      document.getElementById('s-tp').value = cfg.take_profit_pct ?? 1.3;
-      document.getElementById('s-trail').value = cfg.trailing_stop_pct ?? 0.3;
-      document.getElementById('s-retrace').value = cfg.replenishment_retracement_pct ?? 0.3;
       document.getElementById('s-max-loss').value = cfg.max_loss_pct ?? 0;
+      document.getElementById('s-max-total-exposure').value = cfg.max_total_exposure_usdt ?? 0;
+      document.getElementById('s-max-total-committed').value = cfg.max_total_committed_usdt ?? 0;
+      document.getElementById('s-low-balance-pct').value = cfg.low_balance_pct ?? 50;
+      document.getElementById('s-low-balance-min-profit').value = cfg.low_balance_min_profit_pct ?? 0.6;
       document.getElementById('s-cooldown').value = cfg.martin_cooldown_seconds ?? 0;
+      document.getElementById('s-entry-interval').value = cfg.entry_interval_seconds ?? 0;
       document.getElementById('s-btc-drop').value = cfg.btc_drop_pct ?? 5;
       document.getElementById('s-btc-minutes').value = cfg.btc_drop_minutes ?? 15;
       document.getElementById('s-btc-pause').value = cfg.btc_pause_minutes ?? 60;
+      document.getElementById('s-take-profit').value = cfg.take_profit_pct ?? 1.3;
+      document.getElementById('s-trailing-stop').value = cfg.trailing_stop_pct ?? 0.3;
+      document.getElementById('s-double-first').checked = cfg.double_first_order ?? true;
       updateOverboughtPreview();
       if (cfg.grid_drops && cfg.grid_drops.length)
         renderGlobalGridDrops(cfg.grid_drops.length, cfg.grid_drops);
@@ -590,22 +694,28 @@
       rsi_overbought: parseFloat(document.getElementById('s-rsi-over').value),
       overbought_rsi_step: parseFloat(document.getElementById('s-rsi-step').value),
       overbought_min_profit_pct: parseFloat(document.getElementById('s-profit-min').value),
-      overbought_profit_step: parseFloat(document.getElementById('s-profit-step').value),
+      overbought_profit_floor_pct: parseFloat(document.getElementById('s-profit-floor').value) || 0.5,
+      overbought_rsi_max: parseFloat(document.getElementById('s-rsi-max').value) || 85,
       rsi_period: parseInt(document.getElementById('s-rsi-period').value),
       scan_interval: parseInt(document.getElementById('s-interval').value),
       max_open_positions: parseInt(document.getElementById('s-maxpos').value) || 5,
       first_order_amount: parseFloat(document.getElementById('s-first').value),
       martin_multiplier: parseFloat(document.getElementById('s-mult').value),
       max_martin_levels: maxm,
-      take_profit_pct: parseFloat(document.getElementById('s-tp').value),
-      trailing_stop_pct: parseFloat(document.getElementById('s-trail').value),
       max_loss_pct: parseFloat(document.getElementById('s-max-loss').value) || null,
+      max_total_exposure_usdt: parseFloat(document.getElementById('s-max-total-exposure').value) || 0,
+      max_total_committed_usdt: parseFloat(document.getElementById('s-max-total-committed').value) || 0,
+      low_balance_pct: parseFloat(document.getElementById('s-low-balance-pct').value) || 0,
+      low_balance_min_profit_pct: parseFloat(document.getElementById('s-low-balance-min-profit').value) || 0.6,
       martin_cooldown_seconds: parseInt(document.getElementById('s-cooldown').value) || 0,
+      entry_interval_seconds: parseInt(document.getElementById('s-entry-interval').value) || 0,
       btc_drop_pct: parseFloat(document.getElementById('s-btc-drop').value) || 0,
       btc_drop_minutes: parseInt(document.getElementById('s-btc-minutes').value) || 15,
       btc_pause_minutes: parseInt(document.getElementById('s-btc-pause').value) || 60,
-      replenishment_retracement_pct: parseFloat(document.getElementById('s-retrace').value),
       grid_drops: gridDrops,
+      take_profit_pct: parseFloat(document.getElementById('s-take-profit').value) || 1.3,
+      trailing_stop_pct: parseFloat(document.getElementById('s-trailing-stop').value) || 0.3,
+      double_first_order: document.getElementById('s-double-first').checked,
       pairs: [],
     };
     const res = await api('/api/trading/strategy', { method: 'PUT', body: JSON.stringify(body) });
@@ -617,26 +727,36 @@
     const base = parseFloat(document.getElementById('s-rsi-over')?.value) || 70;
     const rsiStep = parseFloat(document.getElementById('s-rsi-step')?.value) || 2;
     const profitMin = parseFloat(document.getElementById('s-profit-min')?.value) || 1.0;
-    const profitStep = parseFloat(document.getElementById('s-profit-step')?.value) || 0.1;
+    const profitFloor = parseFloat(document.getElementById('s-profit-floor')?.value) || 0.5;
+    const rsiMax = parseFloat(document.getElementById('s-rsi-max')?.value) || 85;
     const maxm = parseInt(document.getElementById('s-maxm')?.value) || 5;
     const first = parseFloat(document.getElementById('s-first')?.value) || 20;
     const mult = parseFloat(document.getElementById('s-mult')?.value) || 2;
+
+    // 动态利润门槛计算（与 engine.py 保持一致）
+    function calcRequiredProfit(rsi, effectiveOverbought) {
+      const maxExcess = Math.max(rsiMax - effectiveOverbought, 1);
+      const ratio = Math.min(1.0, (rsi - effectiveOverbought) / maxExcess);
+      return profitMin - ratio * (profitMin - profitFloor);
+    }
 
     let invested = 0, parts = [];
     for (let i = 0; i <= maxm; i++) {
       const amount = i === 0 ? first : first * Math.pow(mult, i);
       invested += amount;
-      const rsiThr = Math.max(50, base - rsiStep * i).toFixed(1);
-      const profitPct = Math.max(0.3, profitMin - profitStep * i).toFixed(1);
-      const profitU = (invested * profitPct / 100).toFixed(2);
-      parts.push(`L${i}: RSI≥${rsiThr} 利润≥${profitPct}%(${profitU}U)`);
+      const rsiThr = Math.max(50, base - rsiStep * i);
+      const profitAtThr = profitMin.toFixed(1);
+      const profitAtMax = calcRequiredProfit(rsiMax, rsiThr).toFixed(1);
+      const profitU = (invested * profitMin / 100).toFixed(1);
+      const profitFloorU = (invested * profitFloor / 100).toFixed(1);
+      parts.push(`L${i}: RSI≥${rsiThr.toFixed(0)} 利润${profitAtThr}%↘${profitAtMax}%(RSI${rsiMax})`);
     }
     const el = document.getElementById('overbought-preview');
     if (el) el.textContent = parts.join('　');
   }
 
   // 超买参数变化时实时更新预览
-  ['s-rsi-over','s-rsi-step','s-profit-min','s-profit-step','s-maxm','s-first','s-mult'].forEach(id => {
+  ['s-rsi-over','s-rsi-step','s-profit-min','s-profit-floor','s-rsi-max','s-maxm','s-first','s-mult'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', updateOverboughtPreview);
   });
 

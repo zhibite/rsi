@@ -6,14 +6,159 @@
   <title>RSI 马丁策略 - 交易记录</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { background: #0f172a; color: #e2e8f0; }
-    .sidebar { background: #1e293b; border-right: 1px solid #334155; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body { background: #0a0f1e; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+    .sidebar { background: #111827; border-right: 1px solid #1f2937; }
     .nav-item { transition: all 0.15s; }
     .nav-item:hover, .nav-item.active { background: rgba(99,102,241,0.15); color: #818cf8; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: #1e293b; }
-    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #111827; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+
+    /* Filter card */
+    .filter-card {
+      background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      padding: 16px 20px;
+    }
+    .filter-input {
+      background: #0a0f1e;
+      border: 1px solid #1f2937;
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 13px;
+      color: #e2e8f0;
+      transition: border-color 0.15s;
+      outline: none;
+    }
+    .filter-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.15); }
+    .filter-input::placeholder { color: #374151; }
+
+    /* Table container */
+    .table-card {
+      background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .trades-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .trades-table thead th {
+      background: #0d1424;
+      color: #4b5563;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 12px 16px;
+      border-bottom: 1px solid #1f2937;
+      white-space: nowrap;
+    }
+    .trades-table thead th:first-child { padding-left: 20px; }
+    .trades-table thead th:last-child  { padding-right: 20px; }
+    .trades-table tbody tr {
+      transition: background 0.12s;
+      border-bottom: 1px solid rgba(31,41,55,0.6);
+    }
+    .trades-table tbody tr:last-child { border-bottom: none; }
+    .trades-table tbody tr:hover { background: rgba(99,102,241,0.05); }
+    .trades-table tbody td {
+      padding: 11px 16px;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    .trades-table tbody td:first-child { padding-left: 20px; }
+    .trades-table tbody td:last-child  { padding-right: 20px; }
+
+    /* Buy/sell badge */
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600;
+      padding: 3px 9px; border-radius: 6px;
+      letter-spacing: 0.02em;
+    }
+    .badge-buy  { background: rgba(59,130,246,0.12); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); }
+    .badge-sell { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.2); }
+
+    /* Note badge */
+    .note-badge {
+      display: inline-flex; align-items: center;
+      font-size: 11px; font-weight: 600;
+      padding: 3px 9px; border-radius: 6px;
+      white-space: nowrap;
+    }
+    .nb-seed     { background: rgba(99,102,241,0.12);  color: #a5b4fc; border: 1px solid rgba(99,102,241,0.25); }
+    .nb-martin   { background: rgba(245,158,11,0.12);  color: #fbbf24; border: 1px solid rgba(245,158,11,0.25); }
+    .nb-trailing { background: rgba(16,185,129,0.12);  color: #34d399; border: 1px solid rgba(16,185,129,0.25); }
+    .nb-manual   { background: rgba(236,72,153,0.12);  color: #f472b6; border: 1px solid rgba(236,72,153,0.25); }
+    .nb-loss     { background: rgba(239,68,68,0.12);   color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+    .nb-overbought { background: rgba(139,92,246,0.12); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.25); }
+    .nb-default  { background: rgba(71,85,105,0.2);    color: #64748b; border: 1px solid #1f2937; }
+    .nb-low-bal  { background: rgba(245,158,11,0.1);   color: #fbbf24; border: 1px solid rgba(245,158,11,0.2); }
+
+    /* PnL */
+    .pnl-pos { color: #34d399; font-weight: 600; }
+    .pnl-neg { color: #f87171; font-weight: 600; }
+
+    /* Symbol styling */
+    .sym-base  { font-weight: 600; color: #e2e8f0; font-size: 13px; }
+    .sym-quote { font-weight: 400; color: #4b5563; font-size: 12px; }
+
+    /* Mono font for numbers */
+    .mono { font-family: 'SF Mono', ui-monospace, 'Cascadia Code', monospace; }
+
+    /* Pagination */
+    .page-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 500;
+      padding: 6px 14px; border-radius: 8px;
+      border: 1px solid #1f2937;
+      color: #6b7280;
+      background: transparent;
+      transition: all 0.15s; cursor: pointer;
+    }
+    .page-btn:hover:not(:disabled) { border-color: #6366f1; color: #a5b4fc; background: rgba(99,102,241,0.08); }
+    .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── Mobile nav ── */
+    .mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; z-index:100; background:#111827; border-top:1px solid #1f2937; height:56px; align-items:stretch; }
+    .mobile-nav a { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:10px; color:#64748b; text-decoration:none; transition:color 0.15s; }
+    .mobile-nav a.active { color:#818cf8; }
+    .mobile-nav a .mn-icon { font-size:20px; line-height:1; }
+
+    /* ── Trade cards (mobile only) ── */
+    .trade-card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; display:flex; overflow:hidden; margin-bottom:8px; }
+    .trade-bar { width: 3px; flex-shrink: 0; }
+    .bar-buy  { background: linear-gradient(180deg, #3b82f6, #6366f1); }
+    .bar-sell { background: linear-gradient(180deg, #34d399, #059669); }
+    .bar-loss { background: linear-gradient(180deg, #ef4444, #dc2626); }
+    .trade-body { flex:1; padding:10px 12px; min-width:0; }
+    .trade-top  { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+    .trade-sym  { font-size:14px; font-weight:700; color:#f0f4ff; }
+    .trade-usdt { font-size:11px; color:#374151; }
+    .badge-buy-m  { font-size:10px; font-weight:700; padding:2px 7px; border-radius:5px; background:rgba(59,130,246,0.12); color:#60a5fa; border:1px solid rgba(59,130,246,0.2); }
+    .badge-sell-m { font-size:10px; font-weight:700; padding:2px 7px; border-radius:5px; background:rgba(248,113,113,0.12); color:#f87171; border:1px solid rgba(248,113,113,0.2); }
+    .trade-pnl  { margin-left:auto; font-size:13px; font-weight:700; font-family:'SF Mono',ui-monospace,monospace; flex-shrink:0; }
+    .trade-metrics { display:flex; gap:12px; margin-bottom:6px; }
+    .tmetric-label { font-size:10px; color:#374151; }
+    .tmetric-val   { font-size:11px; color:#94a3b8; font-family:'SF Mono',ui-monospace,monospace; }
+    .trade-footer  { display:flex; align-items:center; justify-content:space-between; }
+    .trade-time    { font-size:10px; color:#374151; }
+
+    .desktop-table { display:block; }
+    .mobile-cards  { display:none; }
+    @media (max-width: 767px) {
+      aside.sidebar  { display:none !important; }
+      main { margin-left:0 !important; padding:10px !important; padding-bottom:68px !important; }
+      .mobile-nav   { display:flex !important; }
+      .desktop-table { display:none !important; }
+      .mobile-cards  { display:block !important; }
+      .filter-row   { flex-direction:column; gap:8px !important; align-items:stretch !important; }
+      .filter-row > div { width:100% !important; }
+      .filter-row input, .filter-row select { width:100% !important; box-sizing:border-box; }
+      .filter-row-btns { display:flex; gap:8px; }
+      .filter-row-btns button { flex:1; }
+    }
   </style>
 </head>
 <body class="flex min-h-screen">
@@ -27,7 +172,7 @@
   </div>
   <nav class="flex-1 space-y-1">
     <a href="/" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
-      <span>🏠</span> 仪表板
+      <span>🏠</span> 策略运行
     </a>
     <a href="/rsi-scanner.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
       <span>🔍</span> RSI 扫描
@@ -45,82 +190,110 @@
       <span>⚙️</span> 配置
     </a>
   </nav>
-  <div class="px-3 pt-4 border-t border-slate-700">
+  <div class="px-3 pt-4 border-t border-gray-800">
     <div id="user-info" class="text-xs text-slate-500 mb-3"></div>
     <button onclick="logout()" class="text-xs text-slate-500 hover:text-red-400 transition-colors">退出登录</button>
   </div>
 </aside>
 
 <main class="ml-56 flex-1 p-6 overflow-auto">
-  <div class="max-w-7xl mx-auto">
+  <div class="max-w-6xl mx-auto">
 
+    <!-- Header -->
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-xl font-semibold text-white">交易记录</h1>
+      <div>
+        <h1 class="text-2xl font-bold text-white tracking-tight">交易记录</h1>
+        <p class="text-xs text-slate-500 mt-0.5">全部买卖订单流水</p>
+      </div>
+      <span id="trade-count" class="text-xs text-slate-500 bg-slate-800/60 border border-slate-700/50 px-3 py-1.5 rounded-full"></span>
     </div>
 
     <!-- Filters -->
-    <div class="card p-4 mb-5 flex flex-wrap gap-3 items-end">
+    <div class="filter-card mb-4 flex flex-wrap gap-3 items-end filter-row">
       <div>
-        <label class="text-xs text-slate-400 block mb-1">交易对</label>
+        <label class="text-xs font-medium text-slate-400 block mb-1.5">交易对</label>
         <input id="filter-symbol" type="text" placeholder="如 BTC/USDT"
-          class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white w-36" />
+          class="filter-input w-36" />
       </div>
       <div>
-        <label class="text-xs text-slate-400 block mb-1">方向</label>
-        <select id="filter-side"
-          class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white">
+        <label class="text-xs font-medium text-slate-400 block mb-1.5">方向</label>
+        <select id="filter-side" class="filter-input pr-8" style="appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7280' d='M1 1l5 5 5-5'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px">
           <option value="">全部</option>
           <option value="buy">买入</option>
           <option value="sell">卖出</option>
         </select>
       </div>
-      <button onclick="search()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-1.5 rounded-lg">
-        搜索
-      </button>
-      <button onclick="clearFilter()" class="border border-slate-600 text-slate-400 text-sm px-4 py-1.5 rounded-lg hover:border-slate-500">
-        清除
-      </button>
-      <span id="trade-count" class="text-xs text-slate-500 ml-auto self-center"></span>
+      <div class="filter-row-btns flex gap-2">
+        <button onclick="search()"
+          class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all">
+          搜索
+        </button>
+        <button onclick="clearFilter()"
+          class="border border-gray-700 text-slate-400 text-xs font-medium px-4 py-2 rounded-lg hover:border-slate-500 hover:text-slate-300 transition-all">
+          清除
+        </button>
+      </div>
     </div>
 
-    <!-- Table -->
-    <div class="card p-5">
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-slate-500 text-xs border-b border-slate-700">
-              <th class="text-left pb-3">时间</th>
-              <th class="text-left pb-3">交易对</th>
-              <th class="text-center pb-3">方向</th>
-              <th class="text-right pb-3">数量</th>
-              <th class="text-right pb-3">价格</th>
-              <th class="text-right pb-3">成交额 (U)</th>
-              <th class="text-right pb-3">本次盈利 (U)</th>
-              <th class="text-center pb-3">备注</th>
-            </tr>
-          </thead>
-          <tbody id="trades-tbody" class="divide-y divide-slate-800">
-            <tr><td colspan="8" class="text-center text-slate-500 py-12">加载中...</td></tr>
-          </tbody>
-        </table>
-      </div>
+    <!-- Desktop: Table -->
+    <div class="desktop-table">
+      <div class="table-card">
+        <div class="overflow-x-auto">
+          <table class="trades-table">
+            <thead>
+              <tr>
+                <th class="text-left">时间</th>
+                <th class="text-left">交易对</th>
+                <th class="text-center">方向</th>
+                <th class="text-right">数量</th>
+                <th class="text-right">价格</th>
+                <th class="text-right">成交额&nbsp;(U)</th>
+                <th class="text-right">本次盈利&nbsp;(U)</th>
+                <th class="text-center">备注</th>
+              </tr>
+            </thead>
+            <tbody id="trades-tbody">
+              <tr><td colspan="8" class="text-center text-slate-600 py-16 text-sm">加载中…</td></tr>
+            </tbody>
+          </table>
+        </div>
 
-      <!-- Pagination -->
-      <div class="flex justify-between items-center mt-4">
-        <button id="prev-btn" onclick="changePage(-1)"
-          class="text-xs text-slate-400 hover:text-white border border-slate-700 px-3 py-1.5 rounded disabled:opacity-30">
-          上一页
-        </button>
-        <span id="page-info" class="text-xs text-slate-500"></span>
-        <button id="next-btn" onclick="changePage(1)"
-          class="text-xs text-slate-400 hover:text-white border border-slate-700 px-3 py-1.5 rounded disabled:opacity-30">
-          下一页
-        </button>
+        <!-- Pagination -->
+        <div class="flex justify-between items-center px-5 py-3 border-t border-gray-800/60">
+          <button id="prev-btn" onclick="changePage(-1)" class="page-btn">
+            ← 上一页
+          </button>
+          <span id="page-info" class="text-xs text-slate-500 font-medium"></span>
+          <button id="next-btn" onclick="changePage(1)" class="page-btn">
+            下一页 →
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile: Cards -->
+    <div class="mobile-cards">
+      <div id="trades-cards">
+        <div class="text-center text-slate-600 py-16 text-sm">加载中…</div>
+      </div>
+      <div class="flex justify-between items-center mt-3">
+        <button id="prev-btn-m" onclick="changePage(-1)" class="page-btn">← 上一页</button>
+        <span id="page-info-m" class="text-xs text-slate-500"></span>
+        <button id="next-btn-m" onclick="changePage(1)" class="page-btn">下一页 →</button>
       </div>
     </div>
 
   </div>
 </main>
+
+<!-- Bottom mobile nav -->
+<nav class="mobile-nav">
+  <a href="/"><span class="mn-icon">🏠</span><span>主页</span></a>
+  <a href="/rsi-scanner.html"><span class="mn-icon">🔍</span><span>扫描</span></a>
+  <a href="/trades.html" class="active"><span class="mn-icon">📋</span><span>记录</span></a>
+  <a href="/stats.html"><span class="mn-icon">📊</span><span>统计</span></a>
+  <a href="/settings.html"><span class="mn-icon">⚙️</span><span>配置</span></a>
+</nav>
 
 <script>
   let token = localStorage.getItem('token');
@@ -143,70 +316,148 @@
     await loadTrades();
   }
 
+  // ── Note labels & classes ──────────────────────────────────────────────────
+  const NOTE_LABEL = {
+    seed:            '首单买入',
+    trailing_stop:   '追踪止盈',
+    overbought_sell: '超买止盈',
+    manual_sell:     '手动卖出',
+    stop_loss:       '硬止损',
+    low_balance_sell:'余额回收',
+  };
+  const NOTE_CLASS = {
+    seed:            'nb-seed',
+    trailing_stop:   'nb-trailing',
+    overbought_sell: 'nb-overbought',
+    manual_sell:     'nb-manual',
+    stop_loss:       'nb-loss',
+    low_balance_sell:'nb-low-bal',
+  };
+  const NOTE_CHIP_CLASS = {
+    seed:            'nc-seed',
+    trailing_stop:   'nc-trailing',
+    overbought_sell: 'nc-trailing',
+    manual_sell:     'nc-default',
+    stop_loss:       'nc-loss',
+  };
+
+  function noteLabel(n) {
+    if (!n) return '—';
+    if (n.startsWith('ladder_')) return `马丁 L${n.split('_')[1]}`;
+    return NOTE_LABEL[n] || n;
+  }
+  function noteClass(n) {
+    if (!n) return 'nb-default';
+    if (n.startsWith('ladder_')) return 'nb-martin';
+    return NOTE_CLASS[n] || 'nb-default';
+  }
+  function noteChipClass(n) {
+    if (n?.startsWith('ladder_')) return 'nc-martin';
+    return NOTE_CHIP_CLASS[n] || 'nc-default';
+  }
+
+  function fmtTime(ts) {
+    const d = new Date(ts + 'Z');
+    const pad = v => String(v).padStart(2, '0');
+    return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} `
+         + `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  function fmtSymbol(sym) {
+    const [base, quote] = sym.split('/');
+    return `<span class="sym-base">${base}</span><span class="sym-quote">/${quote ?? 'USDT'}</span>`;
+  }
+
   async function loadTrades() {
     const symbol = document.getElementById('filter-symbol').value.trim();
-    const side = document.getElementById('filter-side').value;
+    const side   = document.getElementById('filter-side').value;
     let url = `/api/trading/orders?limit=${PAGE_SIZE}&offset=${currentPage * PAGE_SIZE}`;
     if (symbol) url += `&symbol=${encodeURIComponent(symbol)}`;
-    if (side) url += `&side=${side}`;
+    if (side)   url += `&side=${side}`;
 
     const orders = await api(url);
     if (!orders) return;
 
-    document.getElementById('trade-count').textContent = `共 ${orders.length} 条（本页）`;
-    document.getElementById('page-info').textContent = `第 ${currentPage + 1} 页`;
-    document.getElementById('prev-btn').disabled = currentPage === 0;
-    document.getElementById('next-btn').disabled = orders.length < PAGE_SIZE;
+    const pageLabel = `第 ${currentPage + 1} 页`;
+    const hasMore = orders.length >= PAGE_SIZE;
 
+    document.getElementById('trade-count').textContent = `共 ${orders.length} 条（本页）`;
+    ['page-info','page-info-m'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.textContent = pageLabel;
+    });
+    ['prev-btn','prev-btn-m'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.disabled = currentPage === 0;
+    });
+    ['next-btn','next-btn-m'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.disabled = !hasMore;
+    });
+
+    // ── Desktop table ────────────────────────────────────────────────────────
     const tbody = document.getElementById('trades-tbody');
     if (!orders.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-slate-500 py-12">暂无记录</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-slate-600 py-16 text-sm">暂无记录</td></tr>';
+      document.getElementById('trades-cards').innerHTML = '<div class="text-center text-slate-600 py-16 text-sm">暂无记录</div>';
       return;
     }
 
     tbody.innerHTML = orders.map(o => {
       const isBuy = o.side === 'buy';
-      const sideLabel = isBuy
-        ? '<span class="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">买入</span>'
-        : '<span class="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400">卖出</span>';
-
+      const sideBadge = isBuy
+        ? '<span class="badge badge-buy">↑ 买入</span>'
+        : '<span class="badge badge-sell">↓ 卖出</span>';
       const pnl = o.realized_pnl;
-      let pnlCell = '<td class="py-3 text-right text-slate-600">—</td>';
-      if (pnl != null) {
-        const color = pnl >= 0 ? 'text-green-400' : 'text-red-400';
-        const sign = pnl >= 0 ? '+' : '';
-        pnlCell = `<td class="py-3 text-right ${color} font-medium">${sign}${pnl.toFixed(4)}</td>`;
-      }
+      const pnlCell = pnl != null
+        ? `<td class="text-right mono ${pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)}</td>`
+        : '<td class="text-right text-slate-700 mono">—</td>';
+      const nc = o.note
+        ? `<span class="note-badge ${noteClass(o.note)}">${noteLabel(o.note)}</span>`
+        : '<span class="text-slate-700">—</span>';
 
-      const noteLabel = {
-        seed:            '首单买入',
-        trailing_stop:   '追踪止盈',
-        overbought_sell: '超买止盈',
-        manual_sell:     '手动卖出',
-      }[o.note] || (o.note?.startsWith('ladder_') ? `马丁补仓 L${o.note.split('_')[1]}` : (o.note || '—'));
-      const noteColor = {
-        seed:            'bg-indigo-500/10 text-indigo-400',
-        trailing_stop:   'bg-orange-500/10 text-orange-400',
-        overbought_sell: 'bg-purple-500/10 text-purple-400',
-        manual_sell:     'bg-pink-500/10 text-pink-400',
-      }[o.note] || (o.note?.startsWith('ladder') ? 'bg-yellow-500/10 text-yellow-400' : 'bg-slate-700 text-slate-400');
-      const noteCell = o.note
-        ? `<span class="px-2 py-0.5 rounded text-xs ${noteColor}">${noteLabel}</span>`
-        : '—';
+      return `<tr>
+        <td class="text-slate-500 mono text-xs whitespace-nowrap">${fmtTime(o.timestamp)}</td>
+        <td>${fmtSymbol(o.symbol)}</td>
+        <td class="text-center">${sideBadge}</td>
+        <td class="text-right text-slate-300 mono text-xs">${o.quantity.toPrecision(6)}</td>
+        <td class="text-right text-slate-300 mono text-xs">${o.price.toPrecision(6)}</td>
+        <td class="text-right text-slate-400 mono text-xs">${o.amount_usdt.toFixed(2)}</td>
+        ${pnlCell}
+        <td class="text-center">${nc}</td>
+      </tr>`;
+    }).join('');
 
-      const ts = new Date(o.timestamp + 'Z').toLocaleString('zh-CN', { hour12: false });
-
-      return `
-        <tr class="hover:bg-slate-800/40">
-          <td class="py-3 text-slate-500 text-xs whitespace-nowrap">${ts}</td>
-          <td class="py-3 font-medium text-white">${o.symbol}</td>
-          <td class="py-3 text-center">${sideLabel}</td>
-          <td class="py-3 text-right text-slate-300 font-mono text-xs">${o.quantity.toPrecision(6)}</td>
-          <td class="py-3 text-right text-slate-300">${o.price.toPrecision(6)}</td>
-          <td class="py-3 text-right text-slate-300">${o.amount_usdt.toFixed(2)}</td>
-          ${pnlCell}
-          <td class="py-3 text-center">${noteCell}</td>
-        </tr>`;
+    // ── Mobile cards ─────────────────────────────────────────────────────────
+    document.getElementById('trades-cards').innerHTML = orders.map(o => {
+      const isBuy  = o.side === 'buy';
+      const pnl    = o.realized_pnl;
+      const isLoss = !isBuy && pnl != null && pnl < 0;
+      const barClass = isBuy ? 'bar-buy' : (isLoss ? 'bar-loss' : 'bar-sell');
+      const pnlHtml = pnl != null
+        ? `<span class="trade-pnl ${pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)} U</span>`
+        : '';
+      const sym = o.symbol.replace('/USDT', '');
+      const ts = new Date(o.timestamp + 'Z').toLocaleString('zh-CN', {
+        month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false
+      });
+      return `<div class="trade-card">
+        <div class="trade-bar ${barClass}"></div>
+        <div class="trade-body">
+          <div class="trade-top">
+            <span class="trade-sym">${sym}</span>
+            <span class="trade-usdt">/USDT</span>
+            <span class="${isBuy ? 'badge-buy-m' : 'badge-sell-m'}">${isBuy ? '买入' : '卖出'}</span>
+            ${pnlHtml}
+          </div>
+          <div class="trade-metrics">
+            <div class="tmetric"><div class="tmetric-label">价格</div><div class="tmetric-val">${o.price.toPrecision(6)}</div></div>
+            <div class="tmetric"><div class="tmetric-label">数量</div><div class="tmetric-val">${o.quantity.toPrecision(5)}</div></div>
+            <div class="tmetric"><div class="tmetric-label">金额</div><div class="tmetric-val">${o.amount_usdt.toFixed(2)} U</div></div>
+          </div>
+          <div class="trade-footer">
+            <span class="note-badge ${noteClass(o.note)}" style="font-size:10px;padding:2px 8px">${noteLabel(o.note)}</span>
+            <span class="trade-time">${ts}</span>
+          </div>
+        </div>
+      </div>`;
     }).join('');
   }
 

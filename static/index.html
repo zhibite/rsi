@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RSI 马丁策略 - 仪表板</title>
+  <title>RSI 马丁策略 - 策略运行</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
@@ -16,13 +16,95 @@
     .badge-red { background: rgba(239,68,68,0.15); color: #f87171; }
     .badge-yellow { background: rgba(245,158,11,0.15); color: #fbbf24; }
     .badge-blue { background: rgba(99,102,241,0.15); color: #818cf8; }
+    /* ── Control bar ── */
+    .ctrl-status {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 6px 14px; border-radius: 9999px;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
+      border: 1px solid;
+    }
+    .ctrl-status-dot {
+      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    }
+    .status-running {
+      background: rgba(16,185,129,0.1); color: #34d399;
+      border-color: rgba(16,185,129,0.3);
+    }
+    .status-running .ctrl-status-dot {
+      background: #34d399;
+      box-shadow: 0 0 0 0 rgba(52,211,153,0.5);
+      animation: pulse-green 1.8s infinite;
+    }
+    .status-stopped {
+      background: rgba(100,116,139,0.1); color: #64748b;
+      border-color: rgba(100,116,139,0.2);
+    }
+    .status-stopped .ctrl-status-dot { background: #475569; }
+    @keyframes pulse-green {
+      0%   { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); }
+      70%  { box-shadow: 0 0 0 5px rgba(52,211,153,0); }
+      100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+    }
+    .ctrl-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600;
+      padding: 6px 14px; border-radius: 8px;
+      border: 1px solid; cursor: pointer;
+      transition: all 0.15s; letter-spacing: 0.01em;
+    }
+    .btn-pause-off {
+      background: transparent; color: #94a3b8;
+      border-color: rgba(100,116,139,0.35);
+    }
+    .btn-pause-off:hover { background: rgba(248,113,113,0.08); color: #f87171; border-color: rgba(248,113,113,0.4); }
+    .btn-pause-on {
+      background: rgba(245,158,11,0.12); color: #fbbf24;
+      border-color: rgba(245,158,11,0.4);
+    }
+    .btn-pause-on:hover { background: rgba(245,158,11,0.2); }
+    .btn-start {
+      background: rgba(99,102,241,0.15); color: #a5b4fc;
+      border-color: rgba(99,102,241,0.4);
+    }
+    .btn-start:hover { background: rgba(99,102,241,0.25); color: #c7d2fe; }
+    .btn-stop {
+      background: rgba(239,68,68,0.12); color: #f87171;
+      border-color: rgba(239,68,68,0.35);
+    }
+    .btn-stop:hover { background: rgba(239,68,68,0.22); }
     .rsi-bar { height: 6px; border-radius: 3px; background: #334155; }
     .rsi-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+    /* Martin level badge */
+    .ml-badge { display:inline-block; font-size:11px; font-weight:600; padding:1px 8px; border-radius:4px; }
+    .ml-0 { background:rgba(71,85,105,0.3);  color:#94a3b8; }
+    .ml-1 { background:rgba(99,102,241,0.2); color:#a5b4fc; }
+    .ml-2 { background:rgba(245,158,11,0.2); color:#fbbf24; }
+    .ml-3 { background:rgba(249,115,22,0.2); color:#fb923c; }
+    .ml-4 { background:rgba(239,68,68,0.2);  color:#f87171; }
+    .ml-5 { background:rgba(220,38,38,0.25); color:#fca5a5; }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: #1e293b; }
     ::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
     .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; align-items:center; justify-content:center; }
     .modal-box { background:#1e293b; border:1px solid #334155; border-radius:12px; padding:24px; min-width:320px; max-width:420px; width:90%; }
+    /* ── Mobile nav ── */
+    .mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; z-index:100; background:#1e293b; border-top:1px solid #334155; height:56px; align-items:stretch; }
+    .mobile-nav a { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:10px; color:#64748b; text-decoration:none; transition:color 0.15s; }
+    .mobile-nav a.active { color:#818cf8; }
+    .mobile-nav a .mn-icon { font-size:20px; line-height:1; }
+    @media (max-width: 767px) {
+      aside.sidebar { display:none !important; }
+      main { margin-left:0 !important; padding:12px !important; padding-bottom:68px !important; }
+      .mobile-nav { display:flex !important; }
+      #positions-table { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      #positions-table table { min-width:600px; }
+      .grid.grid-cols-2.lg\:grid-cols-5 { grid-template-columns:repeat(2,1fr) !important; }
+      .winrate-card { display:none !important; }
+      .refresh-btn { display:none !important; }
+      .unit-hint { display:none !important; }
+      .card-label-full { display:none !important; }
+      .card-label-short { display:inline !important; }
+    }
   </style>
 </head>
 <body class="flex min-h-screen">
@@ -37,7 +119,7 @@
   </div>
   <nav class="flex-1 space-y-1">
     <a href="/" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium">
-      <span>🏠</span> 仪表板
+      <span>🏠</span> 策略运行
     </a>
     <a href="/rsi-scanner.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
       <span>🔍</span> RSI 扫描
@@ -67,11 +149,22 @@
 
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-xl font-semibold text-white">仪表板</h1>
-      <div class="flex items-center gap-3">
-        <div id="bot-status-badge" class="px-3 py-1 rounded-full text-xs font-medium badge-red">机器人已停止</div>
-        <button id="bot-toggle-btn" onclick="toggleBot()"
-          class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-1.5 rounded-lg transition-all font-medium">
+      <div>
+        <h1 class="text-xl font-semibold text-white tracking-tight">策略运行</h1>
+        <p class="text-xs text-slate-500 mt-0.5">RSI 马丁量化交易</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <div id="bot-status-badge" class="ctrl-status status-stopped">
+          <span class="ctrl-status-dot"></span>
+          <span>机器人已停止</span>
+        </div>
+        <div class="w-px h-5 bg-slate-700 mx-1"></div>
+        <button id="pause-entries-btn" onclick="togglePauseEntries()" class="ctrl-btn btn-pause-off">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2" y="1.5" width="3" height="9" rx="1" fill="currentColor"/><rect x="7" y="1.5" width="3" height="9" rx="1" fill="currentColor"/></svg>
+          停止开新仓
+        </button>
+        <button id="bot-toggle-btn" onclick="toggleBot()" class="ctrl-btn btn-start">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
           启动机器人
         </button>
       </div>
@@ -80,22 +173,22 @@
     <!-- Summary Cards -->
     <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
       <div class="card p-4">
-        <div class="text-xs text-slate-400 mb-1">账号余额 (USDT)</div>
+        <div class="text-xs text-slate-400 mb-1"><span class="card-label-short" style="display:none">余额</span><span class="card-label-full">账号余额 <span class="unit-hint">(USDT)</span></span></div>
         <div id="stat-balance" class="text-2xl font-bold text-cyan-400">--</div>
       </div>
       <div class="card p-4">
-        <div class="text-xs text-slate-400 mb-1">总收益 (USDT)</div>
+        <div class="text-xs text-slate-400 mb-1"><span class="card-label-short" style="display:none">收益</span><span class="card-label-full">总收益 <span class="unit-hint">(USDT)</span></span></div>
         <div id="stat-pnl" class="text-2xl font-bold text-green-400">--</div>
       </div>
       <div class="card p-4">
-        <div class="text-xs text-slate-400 mb-1">持仓数量</div>
+        <div class="text-xs text-slate-400 mb-1"><span class="card-label-short" style="display:none">持仓</span><span class="card-label-full">持仓数量</span></div>
         <div id="stat-active" class="text-2xl font-bold text-indigo-400">--</div>
       </div>
       <div class="card p-4">
-        <div class="text-xs text-slate-400 mb-1">总交易次数</div>
-        <div id="stat-trades" class="text-2xl font-bold text-white">--</div>
+        <div class="text-xs text-slate-400 mb-1"><span class="card-label-short" style="display:none">今日</span><span class="card-label-full">今日盈利 <span class="unit-hint">(USDT)</span></span></div>
+        <div id="stat-today-pnl" class="text-2xl font-bold text-green-400">--</div>
       </div>
-      <div class="card p-4">
+      <div class="card p-4 winrate-card">
         <div class="text-xs text-slate-400 mb-1">胜率</div>
         <div id="stat-winrate" class="text-2xl font-bold text-yellow-400">--</div>
       </div>
@@ -108,7 +201,7 @@
       <div class="card p-5 lg:col-span-3">
         <div class="flex items-center justify-between mb-4">
           <h2 class="font-semibold text-white text-sm">当前持仓</h2>
-          <button onclick="loadPositions()" class="text-xs text-indigo-400 hover:text-indigo-300">刷新</button>
+          <button onclick="loadPositions()" class="refresh-btn text-xs text-indigo-400 hover:text-indigo-300">刷新</button>
         </div>
         <div id="positions-table" class="text-xs">
           <div class="text-slate-500 text-center py-8">暂无持仓</div>
@@ -119,7 +212,7 @@
       <div class="card p-5 lg:col-span-3">
         <div class="flex items-center justify-between mb-4">
           <h2 class="font-semibold text-white text-sm">运行日志</h2>
-          <button onclick="loadLogs()" class="text-xs text-indigo-400 hover:text-indigo-300">刷新</button>
+          <button onclick="loadLogs()" class="refresh-btn text-xs text-indigo-400 hover:text-indigo-300">刷新</button>
         </div>
         <div id="log-list" class="font-mono text-xs space-y-0.5 max-h-64 overflow-y-auto">
           <div class="text-slate-500 py-4 text-center">暂无日志</div>
@@ -132,25 +225,53 @@
 
 <!-- 手动卖出 Modal -->
 <div id="sell-modal" class="modal-overlay hidden">
-  <div class="modal-box">
-    <h3 class="text-sm font-semibold text-white mb-1">手动卖出</h3>
-    <p id="sell-modal-symbol" class="text-xs text-slate-400 mb-4"></p>
-    <p class="text-xs text-slate-400 mb-3">选择卖出比例：</p>
-    <div class="flex gap-3 mb-5">
+  <div class="modal-box" style="max-width:360px">
+    <div class="flex items-center gap-2 mb-3">
+      <span style="font-size:18px">📤</span>
+      <h3 class="text-sm font-semibold text-white">手动卖出</h3>
+    </div>
+    <p id="sell-modal-symbol" class="text-xs font-semibold text-indigo-400 mb-4 tracking-wide"></p>
+    <p class="text-xs text-slate-500 mb-3">选择卖出比例</p>
+    <div class="flex gap-2 mb-5">
       <button onclick="confirmSell(25)"
-        class="flex-1 py-2 text-sm rounded-lg border border-orange-600/40 text-orange-400 hover:bg-orange-600/10 transition-all">
+        class="flex-1 py-2 text-xs font-semibold rounded-lg border border-slate-600 text-slate-300 hover:border-orange-500/60 hover:text-orange-300 hover:bg-orange-500/8 transition-all">
         25%
       </button>
       <button onclick="confirmSell(50)"
-        class="flex-1 py-2 text-sm rounded-lg border border-orange-600/40 text-orange-400 hover:bg-orange-600/10 transition-all">
+        class="flex-1 py-2 text-xs font-semibold rounded-lg border border-slate-600 text-slate-300 hover:border-orange-500/60 hover:text-orange-300 hover:bg-orange-500/8 transition-all">
         50%
       </button>
       <button onclick="confirmSell(100)"
-        class="flex-1 py-2 text-sm rounded-lg border border-red-600/50 text-red-400 hover:bg-red-600/10 transition-all font-medium">
+        class="flex-1 py-2 text-xs font-semibold rounded-lg border border-red-700/50 text-red-400 bg-red-900/10 hover:bg-red-900/25 hover:border-red-500/70 transition-all">
         100% 清仓
       </button>
     </div>
-    <button onclick="closeSellModal()" class="text-xs text-slate-400 hover:text-slate-300">取消</button>
+    <button onclick="closeSellModal()"
+      class="w-full py-1.5 text-xs text-slate-500 hover:text-slate-300 border border-slate-700/50 rounded-lg transition-colors">
+      取消
+    </button>
+  </div>
+</div>
+
+<!-- 清仓二次确认 Modal -->
+<div id="confirm-modal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:340px">
+    <div class="flex items-center gap-2 mb-3">
+      <span style="font-size:18px">⚠️</span>
+      <h3 class="text-sm font-semibold text-white">确认清仓</h3>
+    </div>
+    <p class="text-xs text-slate-400 mb-1">即将对以下持仓执行 <span class="text-red-400 font-semibold">100% 市价清仓</span></p>
+    <p id="confirm-modal-symbol" class="text-sm font-bold text-white mb-5 mt-2 pl-1 border-l-2 border-red-500"></p>
+    <div class="flex gap-2">
+      <button onclick="closeConfirmModal()"
+        class="flex-1 py-2 text-xs font-medium rounded-lg border border-slate-600 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-all">
+        取消
+      </button>
+      <button id="confirm-modal-ok" onclick="doConfirmSell()"
+        class="flex-1 py-2 text-xs font-semibold rounded-lg bg-red-700/30 border border-red-600/50 text-red-300 hover:bg-red-700/50 hover:border-red-500 transition-all">
+        确认清仓
+      </button>
+    </div>
   </div>
 </div>
 
@@ -174,14 +295,25 @@
   </div>
 </div>
 
+<!-- Bottom mobile nav -->
+<nav class="mobile-nav">
+  <a href="/" class="active"><span class="mn-icon">🏠</span><span>主页</span></a>
+  <a href="/rsi-scanner.html"><span class="mn-icon">🔍</span><span>扫描</span></a>
+  <a href="/trades.html"><span class="mn-icon">📋</span><span>记录</span></a>
+  <a href="/stats.html"><span class="mn-icon">📊</span><span>统计</span></a>
+  <a href="/settings.html"><span class="mn-icon">⚙️</span><span>配置</span></a>
+</nav>
+
 <script>
   const API = '';
   let token = localStorage.getItem('token');
   let botRunning = false;
+  let pauseNewEntries = false;
   let ws = null;
   let wsRsi = null;      // public RSI WS for live prices
   let rsiMap = {};       // symbol → rsi (from WebSocket)
   let livePrice = {};    // symbol → latest price (from public RSI WS)
+  let volumeMap = {};    // symbol → 24h volume USDT (from public RSI WS)
   let positionsData = []; // latest positions from API
 
   if (!token) window.location.href = '/login.html';
@@ -232,7 +364,36 @@
   }
 
   async function refreshAll() {
-    await Promise.all([loadBotStatus(), loadBalance(), loadStats(), loadPositions(), loadLogs()]);
+    await Promise.all([loadBotStatus(), loadPauseState(), loadBalance(), loadStats(), loadPositions(), loadLogs()]);
+  }
+
+  async function loadPauseState() {
+    const data = await api('/api/trading/strategy');
+    if (!data) return;
+    pauseNewEntries = data.pause_new_entries ?? false;
+    renderPauseBtn();
+  }
+
+  function renderPauseBtn() {
+    const btn = document.getElementById('pause-entries-btn');
+    if (!btn) return;
+    if (pauseNewEntries) {
+      // 当前状态：已暂停开新仓 → 琥珀色表示"异常/暂停中"，文字描述当前状态
+      btn.className = 'ctrl-btn btn-pause-on';
+      btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2" y="1.5" width="3" height="9" rx="1" fill="currentColor"/><rect x="7" y="1.5" width="3" height="9" rx="1" fill="currentColor"/></svg> 开仓已暂停';
+    } else {
+      // 当前状态：正常开仓中 → 灰色低调，文字为可执行的操作
+      btn.className = 'ctrl-btn btn-pause-off';
+      btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2" y="1.5" width="3" height="9" rx="1" fill="currentColor"/><rect x="7" y="1.5" width="3" height="9" rx="1" fill="currentColor"/></svg> 停止开新仓';
+    }
+  }
+
+  async function togglePauseEntries() {
+    const data = await api('/api/trading/strategy/pause-entries', { method: 'PUT' });
+    if (!data) return;
+    pauseNewEntries = data.pause_new_entries;
+    renderPauseBtn();
+    toast(pauseNewEntries ? '已停止开新仓，现有持仓继续运行' : '已恢复开新仓');
   }
 
   async function loadBalance() {
@@ -253,17 +414,17 @@
     if (!data) return;
     botRunning = data.running;
     const badge = document.getElementById('bot-status-badge');
-    const btn = document.getElementById('bot-toggle-btn');
+    const btn   = document.getElementById('bot-toggle-btn');
     if (botRunning) {
-      badge.className = 'px-3 py-1 rounded-full text-xs font-medium badge-green';
-      badge.textContent = '机器人运行中';
-      btn.textContent = '停止机器人';
-      btn.className = 'bg-red-600 hover:bg-red-500 text-white text-sm px-4 py-1.5 rounded-lg transition-all font-medium';
+      badge.className = 'ctrl-status status-running';
+      badge.innerHTML = '<span class="ctrl-status-dot"></span><span>机器人运行中</span>';
+      btn.className = 'ctrl-btn btn-stop';
+      btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="currentColor"/></svg> 停止机器人';
     } else {
-      badge.className = 'px-3 py-1 rounded-full text-xs font-medium badge-red';
-      badge.textContent = '机器人已停止';
-      btn.textContent = '启动机器人';
-      btn.className = 'bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-1.5 rounded-lg transition-all font-medium';
+      badge.className = 'ctrl-status status-stopped';
+      badge.innerHTML = '<span class="ctrl-status-dot"></span><span>机器人已停止</span>';
+      btn.className = 'ctrl-btn btn-start';
+      btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg> 启动机器人';
     }
   }
 
@@ -273,7 +434,8 @@
     document.getElementById('stat-pnl').textContent = (d.total_pnl >= 0 ? '+' : '') + d.total_pnl.toFixed(4);
     document.getElementById('stat-pnl').className = `text-2xl font-bold ${d.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
     document.getElementById('stat-active').textContent = d.active_positions;
-    document.getElementById('stat-trades').textContent = d.total_trades;
+    document.getElementById('stat-today-pnl').textContent = (d.today_pnl >= 0 ? '+' : '') + d.today_pnl.toFixed(4);
+    document.getElementById('stat-today-pnl').className = `text-2xl font-bold ${d.today_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
     document.getElementById('stat-winrate').textContent = d.win_rate.toFixed(1) + '%';
   }
 
@@ -290,33 +452,81 @@
       el.innerHTML = '<div class="text-slate-500 text-center py-8">暂无持仓</div>';
       return;
     }
+    const isMobile = window.innerWidth <= 767;
+    if (isMobile) {
+      el.innerHTML = positionsData.map(p => {
+        const cp = livePrice[p.symbol] ?? p.current_price;
+        const pnlPct = (cp != null && p.avg_price > 0) ? (cp - p.avg_price) / p.avg_price * 100 : null;
+        const pnlColor = pnlPct == null ? 'text-slate-500' : pnlPct >= 0 ? 'text-green-400' : 'text-red-400';
+        const pnlText = pnlPct == null ? '—' : (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%';
+        const profitUsdt = (cp != null && p.avg_price > 0) ? (cp - p.avg_price) * p.total_quantity : null;
+        const profitColor = profitUsdt == null ? 'text-slate-500' : profitUsdt >= 0 ? 'text-green-400' : 'text-red-400';
+        const profitText = profitUsdt == null ? '—' : (profitUsdt >= 0 ? '+' : '') + profitUsdt.toFixed(2);
+        const rsi = rsiMap[p.symbol];
+        const rsiColor = rsi == null || rsi <= 0 ? 'text-slate-600' : rsi < 30 ? 'text-red-400' : rsi < 40 ? 'text-orange-400' : rsi > 70 ? 'text-green-400' : 'text-slate-300';
+        const rsiText = rsi == null || rsi <= 0 ? '—' : rsi.toFixed(1);
+        const statusBadge = p.trailing_active
+          ? '<span class="badge-green px-1.5 py-0.5 rounded text-xs">追踪止盈</span>'
+          : '<span class="badge-blue px-1.5 py-0.5 rounded text-xs">持仓中</span>';
+        return `
+        <div class="border border-slate-700 rounded-lg p-3 mb-2">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-white text-sm">${p.symbol}</span>
+              <span class="badge-yellow px-1.5 py-0.5 rounded text-xs">L${p.martin_level}</span>
+              ${statusBadge}
+            </div>
+            <span class="font-bold text-base ${pnlColor}">${pnlText}</span>
+          </div>
+          <div class="grid grid-cols-3 gap-x-2 text-xs text-slate-400 mb-2">
+            <div>均价<br><span class="text-slate-200 font-mono">${p.avg_price.toPrecision(5)}</span></div>
+            <div>利润<br><span class="${profitColor} font-mono">${profitText}</span></div>
+            <div>RSI<br><span class="${rsiColor} font-mono">${rsiText}</span></div>
+          </div>
+          <div class="flex gap-2 pt-2 border-t border-slate-800">
+            <button onclick="openSellModal(${p.id}, '${p.symbol}')"
+              class="flex-1 py-1.5 text-xs rounded border border-orange-600/40 text-orange-400">卖出</button>
+            <button onclick="openBuyModal(${p.id}, '${p.symbol}')"
+              class="flex-1 py-1.5 text-xs rounded border border-emerald-600/40 text-emerald-400">补仓</button>
+          </div>
+        </div>`;
+      }).join('');
+      return;
+    }
     el.innerHTML = `
-      <table class="w-full">
+      <div style="overflow-x:auto">
+      <table class="w-full text-xs">
         <thead><tr class="text-slate-500 border-b border-slate-700">
-          <th class="text-left pb-2">交易对</th>
-          <th class="text-right pb-2">持仓均价</th>
-          <th class="text-right pb-2">当前价</th>
-          <th class="text-right pb-2">涨跌幅</th>
-          <th class="text-right pb-2">利润(U)</th>
-          <th class="text-right pb-2">持仓金额(U)</th>
-          <th class="text-right pb-2">马丁层</th>
-          <th class="text-right pb-2">RSI</th>
-          <th class="text-right pb-2">状态</th>
-          <th class="text-right pb-2">操作</th>
+          <th class="text-left pb-2.5 font-medium">交易对</th>
+          <th class="text-right pb-2.5 font-medium">涨跌幅</th>
+          <th class="text-right pb-2.5 font-medium">利润 (U)</th>
+          <th class="text-right pb-2.5 font-medium">当前价</th>
+          <th class="text-right pb-2.5 font-medium">持仓均价</th>
+          <th class="text-right pb-2.5 font-medium">24H量 (U)</th>
+          <th class="text-right pb-2.5 font-medium">金额 (U)</th>
+          <th class="text-center pb-2.5 font-medium">马丁层</th>
+          <th class="text-right pb-2.5 font-medium">RSI</th>
+          <th class="text-center pb-2.5 font-medium">状态</th>
+          <th class="text-right pb-2.5 font-medium">操作</th>
         </tr></thead>
-        <tbody class="divide-y divide-slate-800">
+        <tbody class="divide-y divide-slate-800/60">
           ${positionsData.map(p => {
-            // Prefer live price from WS scanner (updates every ~2s), fallback to API value
             const cp = livePrice[p.symbol] ?? p.current_price;
             const pnlPct = (cp != null && p.avg_price > 0)
               ? (cp - p.avg_price) / p.avg_price * 100 : null;
-            const pnlColor = pnlPct == null ? 'text-slate-500' : pnlPct >= 0 ? 'text-green-400' : 'text-red-400';
-            const pnlText = pnlPct == null ? '—' : (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%';
+            const pnlColor = pnlPct == null ? 'text-slate-600' : pnlPct >= 0 ? 'text-green-400' : 'text-red-400';
+            const pnlText  = pnlPct == null ? '—' : (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%';
             const profitUsdt = (cp != null && p.avg_price > 0)
               ? (cp - p.avg_price) * p.total_quantity : null;
-            const profitColor = profitUsdt == null ? 'text-slate-500' : profitUsdt >= 0 ? 'text-green-400' : 'text-red-400';
-            const profitText = profitUsdt == null ? '—' : (profitUsdt >= 0 ? '+' : '') + profitUsdt.toFixed(2);
+            const profitColor = profitUsdt == null ? 'text-slate-600' : profitUsdt >= 0 ? 'text-green-400' : 'text-red-400';
+            const profitText  = profitUsdt == null ? '—' : (profitUsdt >= 0 ? '+' : '') + profitUsdt.toFixed(2);
             const curPrice = cp != null ? cp.toPrecision(6) : '—';
+            const vol = volumeMap[p.symbol];
+            const volText = vol == null || vol === 0 ? '—'
+              : vol >= 1e9 ? (vol / 1e9).toFixed(2) + 'B'
+              : vol >= 1e6 ? (vol / 1e6).toFixed(2) + 'M'
+              : vol >= 1e3 ? (vol / 1e3).toFixed(1) + 'K'
+              : vol.toFixed(0);
             const rsi = rsiMap[p.symbol];
             let rsiHtml;
             if (rsi == null || rsi <= 0) {
@@ -325,33 +535,32 @@
               const rsiColor = rsi < 30 ? 'text-red-400' : rsi < 40 ? 'text-orange-400' : rsi > 70 ? 'text-green-400' : 'text-slate-300';
               rsiHtml = `<span class="${rsiColor} font-mono">${rsi.toFixed(1)}</span>`;
             }
-            return `
-            <tr class="hover:bg-slate-800/50">
-              <td class="py-2 font-medium text-white">${p.symbol}</td>
-              <td class="py-2 text-right text-slate-300">${p.avg_price.toFixed(6)}</td>
-              <td class="py-2 text-right text-slate-400">${curPrice}</td>
-              <td class="py-2 text-right font-medium ${pnlColor}">${pnlText}</td>
-              <td class="py-2 text-right font-medium ${profitColor}">${profitText}</td>
-              <td class="py-2 text-right text-slate-300">${p.total_invested.toFixed(2)}</td>
-              <td class="py-2 text-right">
-                <span class="badge-yellow px-2 py-0.5 rounded text-xs">L${p.martin_level}</span>
-              </td>
-              <td class="py-2 text-right">${rsiHtml}</td>
-              <td class="py-2 text-right">
-                ${p.trailing_active
+            const mlCls = 'ml-' + Math.min(p.martin_level, 5);
+            const okxUrl = 'https://www.okx.com/trade-spot/' + p.symbol.replace('/', '-').toLowerCase();
+            return '<tr class="hover:bg-slate-800/40">'
+              + '<td class="py-2.5 font-semibold"><a href="' + okxUrl + '" target="_blank" rel="noopener" class="text-slate-100 hover:text-indigo-300 transition-colors">' + p.symbol + '</a></td>'
+              + '<td class="py-2.5 text-right font-semibold ' + pnlColor + '">' + pnlText + '</td>'
+              + '<td class="py-2.5 text-right font-semibold ' + profitColor + '">' + profitText + '</td>'
+              + '<td class="py-2.5 text-right text-slate-400 font-mono">' + curPrice + '</td>'
+              + '<td class="py-2.5 text-right text-slate-300 font-mono">' + p.avg_price.toPrecision(6) + '</td>'
+              + '<td class="py-2.5 text-right text-slate-400 font-mono">' + volText + '</td>'
+              + '<td class="py-2.5 text-right text-slate-400 font-mono">' + p.total_invested.toFixed(2) + '</td>'
+              + '<td class="py-2.5 text-center"><span class="ml-badge ' + mlCls + '">L' + p.martin_level + '</span></td>'
+              + '<td class="py-2.5 text-right">' + rsiHtml + '</td>'
+              + '<td class="py-2.5 text-center">'
+              + (p.trailing_active
                   ? '<span class="badge-green px-2 py-0.5 rounded text-xs">追踪止盈</span>'
-                  : '<span class="badge-blue px-2 py-0.5 rounded text-xs">持仓中</span>'}
-              </td>
-              <td class="py-2 text-right whitespace-nowrap">
-                <button onclick="openSellModal(${p.id}, '${p.symbol}')"
-                  class="text-xs text-orange-400 hover:text-orange-300 mr-2">卖出</button>
-                <button onclick="openBuyModal(${p.id}, '${p.symbol}')"
-                  class="text-xs text-emerald-400 hover:text-emerald-300">补仓</button>
-              </td>
-            </tr>`;
+                  : '<span class="badge-blue px-2 py-0.5 rounded text-xs">持仓中</span>')
+              + '</td>'
+              + '<td class="py-2.5 text-right whitespace-nowrap">'
+              + '<button onclick="openSellModal(' + p.id + ', \'' + p.symbol + '\')" class="text-orange-400 hover:text-orange-300 mr-3 transition-colors">卖出</button>'
+              + '<button onclick="openBuyModal(' + p.id + ', \'' + p.symbol + '\')" class="text-emerald-400 hover:text-emerald-300 transition-colors">补仓</button>'
+              + '</td>'
+              + '</tr>';
           }).join('')}
         </tbody>
-      </table>`;
+      </table>
+      </div>`;
   }
 
   async function loadLogs() {
@@ -362,8 +571,12 @@
       el.innerHTML = '<div class="text-slate-500 py-4 text-center">暂无日志</div>';
       return;
     }
+    const isMobile = window.innerWidth <= 767;
     el.innerHTML = logs.map(l => {
-      const ts = new Date(l.timestamp + 'Z').toLocaleString('zh-CN');
+      const d = new Date(l.timestamp + 'Z');
+      const ts = isMobile
+        ? d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : d.toLocaleString('zh-CN');
       const color = l.level === 'ERROR' ? 'text-red-400' : l.level === 'WARNING' ? 'text-yellow-400' : 'text-slate-400';
       const sym = l.symbol ? `<span class="text-indigo-400">[${l.symbol}]</span> ` : '';
       return `<div class="${color} leading-5">${ts} ${sym}${l.message}</div>`;
@@ -395,10 +608,38 @@
     _sellPositionId = null;
   }
 
+  let _pendingSellPct = null;
+  let _pendingSellPositionId = null;
+
   async function confirmSell(pct) {
-    if (pct === 100 && !confirm(`确认 100% 清仓 ${_sellSymbol}？`)) return;
+    if (pct === 100) {
+      // 先保存 positionId，再关闭卖出面板（close 会清空 _sellPositionId）
+      _pendingSellPositionId = _sellPositionId;
+      _pendingSellPct = 100;
+      closeSellModal();
+      document.getElementById('confirm-modal-symbol').textContent = _sellSymbol;
+      document.getElementById('confirm-modal').classList.remove('hidden');
+      return;
+    }
     const positionId = _sellPositionId;
     closeSellModal();
+    await _executeSell(positionId, pct);
+  }
+
+  function closeConfirmModal() {
+    document.getElementById('confirm-modal').classList.add('hidden');
+    _pendingSellPct = null;
+    _pendingSellPositionId = null;
+  }
+
+  async function doConfirmSell() {
+    const positionId = _pendingSellPositionId;
+    const pct = _pendingSellPct;
+    closeConfirmModal();
+    await _executeSell(positionId, pct);
+  }
+
+  async function _executeSell(positionId, pct) {
     const res = await api(`/api/trading/positions/${positionId}/manual-sell`, {
       method: 'POST',
       body: JSON.stringify({ pct }),
@@ -485,6 +726,7 @@
           for (const it of (msg.items || [])) {
             livePrice[it.symbol] = it.price;
             if (it.rsi) rsiMap[it.symbol] = it.rsi;
+            if (it.volume) volumeMap[it.symbol] = it.volume;
           }
         }
       } catch {}

@@ -5,8 +5,8 @@ Each user with an enabled strategy runs an independent asyncio task that:
   1. Fetches RSI for each configured pair (1-min candles).
   2. Opens a new position when RSI < oversold threshold (no active position for that pair).
   3. Applies Martingale grid buys if price drops beyond each grid level from the previous buy.
-  4. Activates trailing stop when unrealised profit >= take_profit_pct.
-  5. Sells when price retraces trailing_stop_pct from the peak price.
+  4. Sells when RSI reaches overbought threshold and profit meets dynamic minimum.
+  5. Force-sells in low-balance mode when profit meets the low-balance minimum.
 
 Martingale sizes (default, multiplier=2x):
   Level 0 (initial):  20 USDT
@@ -50,6 +50,13 @@ _manual_op_symbols: dict[int, set[str]] = {}
 _btc_price_history: deque = deque(maxlen=2000)
 # BTC 熔断暂停到期时间戳：user_id → unix_ts
 _circuit_breaker_until: dict[int, float] = {}
+# 全局开单频率限制：user_id → 上次新开仓的 unix_ts
+_last_entry_time: dict[int, float] = {}
+# USDT 余额缓存：user_id → (cached_at_ts, available_usdt)，避免每次 scan 都打 API
+_usdt_balance_cache: dict[int, tuple[float, float]] = {}
+_BALANCE_CACHE_TTL = 30.0  # 余额缓存 30 秒
+# 当前余额消耗比例缓存：user_id → consumed_pct，每轮 _process_pairs 更新一次
+_balance_consumed_pct: dict[int, float] = {}
 
 # WebSocket broadcast callback (set by main.py)
 _ws_broadcast_fn = None
@@ -68,9 +75,8 @@ def _fallback_pair_cfg(strategy: StrategyConfig, symbol: str):
         martin_multiplier=strategy.martin_multiplier,
         max_martin_levels=strategy.max_martin_levels,
         grid_drops=strategy.grid_drops or [1.0, 2.0, 3.0, 4.0, 5.0],
-        take_profit_pct=strategy.take_profit_pct,
-        trailing_stop_pct=strategy.trailing_stop_pct,
-        replenishment_retracement_pct=getattr(strategy, "replenishment_retracement_pct", 0.3) or 0.0,
+        take_profit_pct=getattr(strategy, "take_profit_pct", 1.3) or 1.3,
+        trailing_stop_pct=getattr(strategy, "trailing_stop_pct", 0.3) or 0.3,
     )
 
 
@@ -162,6 +168,45 @@ def _open_positions_by_symbol(db: Session, user_id: int) -> dict[str, Position]:
         .all()
     )
     return {p.symbol: p for p in positions}
+
+
+def _martin_order_amount(pair_cfg, level: int) -> float:
+    return pair_cfg.first_order_amount * (pair_cfg.martin_multiplier ** level)
+
+
+def _remaining_martin_budget(pair_cfg, current_level: int) -> float:
+    max_levels = getattr(pair_cfg, "max_martin_levels", 0) or 0
+    if current_level >= max_levels:
+        return 0.0
+    return sum(_martin_order_amount(pair_cfg, level) for level in range(current_level + 1, max_levels + 1))
+
+
+def _new_position_seed_amount(pair_cfg, double_first: bool) -> float:
+    return pair_cfg.first_order_amount * (2 if double_first else 1)
+
+
+def _new_position_committed_usdt(pair_cfg, double_first: bool) -> float:
+    return _new_position_seed_amount(pair_cfg, double_first) + _remaining_martin_budget(pair_cfg, current_level=0)
+
+
+def _position_committed_usdt(pos: Position, pair_cfg) -> float:
+    return pos.total_invested + _remaining_martin_budget(pair_cfg, current_level=pos.martin_level)
+
+
+def _total_open_invested(open_positions: dict[str, Position]) -> float:
+    return sum(pos.total_invested for pos in open_positions.values())
+
+
+def _total_committed_exposure(
+    open_positions: dict[str, Position],
+    pair_cfg_map: dict[str, PairConfig],
+    strategy: StrategyConfig,
+) -> float:
+    total = 0.0
+    for symbol, pos in open_positions.items():
+        pair_cfg = pair_cfg_map.get(symbol) or _fallback_pair_cfg(strategy, symbol)
+        total += _position_committed_usdt(pos, pair_cfg)
+    return total
 
 
 def _create_position(
@@ -351,6 +396,44 @@ async def _scan_cycle(user_id: int, okx: OKXClient):
     await asyncio.sleep(scan_interval)
 
 
+async def _refresh_balance_consumed_pct(
+    user_id: int,
+    okx: OKXClient,
+    open_positions: dict,
+) -> None:
+    """每轮 scan 更新余额消耗比例缓存，供补仓冷却判断使用。"""
+    total_invested = sum(pos.total_invested for pos in open_positions.values())
+    now = time.time()
+    cached = _usdt_balance_cache.get(user_id)
+    if cached and now - cached[0] < _BALANCE_CACHE_TTL:
+        available = cached[1]
+    else:
+        try:
+            available = await okx.fetch_usdt_balance()
+            _usdt_balance_cache[user_id] = (now, available)
+        except Exception as e:
+            logger.warning(f"[Bot {user_id}] Failed to fetch USDT balance: {e}")
+            return  # 保留上次缓存值
+    total = total_invested + available
+    _balance_consumed_pct[user_id] = (total_invested / total * 100) if total > 0 else 0.0
+
+
+def _is_low_balance(user_id: int, low_balance_pct: float) -> bool:
+    """
+    判断剩余可用余额是否低于阈值（即进入低余额模式）。
+    low_balance_pct == 0 → 关闭低余额模式，始终返回 False
+    low_balance_pct > 0  → 剩余余额% = (100 - consumed_pct) < low_balance_pct 时返回 True
+    缓存未初始化时保守返回 False（不触发限制）。
+    """
+    if low_balance_pct <= 0:
+        return False
+    consumed = _balance_consumed_pct.get(user_id)
+    if consumed is None:
+        return False
+    remaining = 100.0 - consumed
+    return remaining < low_balance_pct
+
+
 async def _process_pairs(
     user_id: int,
     okx: OKXClient,
@@ -363,6 +446,9 @@ async def _process_pairs(
     pair_cfg_map = {pc.symbol: pc for pc in pair_cfgs}
     rsi_cache.setdefault(user_id, {})
     max_pos = getattr(strategy, "max_open_positions", 5) or 5
+
+    # ── 余额消耗比例（每轮更新，供补仓冷却判断使用）────────────────────────────
+    await _refresh_balance_consumed_pct(user_id, okx, open_positions)
 
     # ── BTC 价格记录 & 熔断检查 ───────────────────────────────────────────────
     btc_price = ws_scanner.prices.get("BTC/USDT")
@@ -394,14 +480,16 @@ async def _process_pairs(
         ws_price = ws_scanner.prices.get(symbol)
         if ws_price is None:
             continue
-        ws_rsi = ws_scanner.rsi_values.get(symbol)
+        ws_rsi = ws_scanner.confirmed_rsi_values.get(symbol)
         rsi_cache[user_id][symbol] = ws_rsi or 0
         pc = pair_cfg_map.get(symbol) or _fallback_pair_cfg(strategy, symbol)
         try:
             with SessionLocal() as db:
                 pos = db.query(Position).filter_by(id=pos_ref.id, status="open").first()
                 if pos:
-                    await _manage_position(db, user_id, okx, strategy, pc, pos, ws_price, ws_rsi)
+                    await _manage_position(
+                        db, user_id, okx, strategy, pc, pos, ws_price, open_positions, ws_rsi
+                    )
                     db.refresh(pos)
                     if pos.status == "closed":
                         open_positions.pop(symbol, None)  # 已平仓，从字典移除，让 len() 计数正确
@@ -421,8 +509,10 @@ async def _process_pairs(
             continue  # already managed above
         if circuit_open:
             continue  # BTC 熔断，暂停开新仓
+        if getattr(strategy, "pause_new_entries", False):
+            continue  # 手动停止开新仓
         try:
-            ws_rsi = ws_scanner.rsi_values.get(symbol)
+            ws_rsi = ws_scanner.confirmed_rsi_values.get(symbol)
             ws_price = ws_scanner.prices.get(symbol)
             if ws_rsi is None or ws_price is None:
                 continue
@@ -437,6 +527,39 @@ async def _process_pairs(
                         f"max_open_positions={max_pos} reached (current={len(open_positions)}), skip"
                     )
                 else:
+                    entry_interval = getattr(strategy, "entry_interval_seconds", 0) or 0
+                    if entry_interval > 0:
+                        last_entry = _last_entry_time.get(user_id, 0)
+                        elapsed = time.time() - last_entry
+                        if elapsed < entry_interval:
+                            logger.info(
+                                f"[Bot {user_id}] {symbol} RSI={ws_rsi:.1f} oversold but "
+                                f"entry interval not reached ({elapsed:.0f}s < {entry_interval}s), skip"
+                            )
+                            continue
+                    double_first = getattr(strategy, "double_first_order", True)
+                    seed_amount = _new_position_seed_amount(pc, double_first)
+                    max_total_exposure = getattr(strategy, "max_total_exposure_usdt", 0.0) or 0.0
+                    if max_total_exposure > 0:
+                        projected_exposure = _total_open_invested(open_positions) + seed_amount
+                        if projected_exposure > max_total_exposure:
+                            logger.info(
+                                f"[Bot {user_id}] {symbol} skipped: projected exposure "
+                                f"{projected_exposure:.2f} > max_total_exposure_usdt={max_total_exposure:.2f}"
+                            )
+                            continue
+                    max_total_committed = getattr(strategy, "max_total_committed_usdt", 0.0) or 0.0
+                    if max_total_committed > 0:
+                        projected_committed = (
+                            _total_committed_exposure(open_positions, pair_cfg_map, strategy)
+                            + _new_position_committed_usdt(pc, double_first)
+                        )
+                        if projected_committed > max_total_committed:
+                            logger.info(
+                                f"[Bot {user_id}] {symbol} skipped: projected committed exposure "
+                                f"{projected_committed:.2f} > max_total_committed_usdt={max_total_committed:.2f}"
+                            )
+                            continue
                     with SessionLocal() as db:
                         _db_log(
                             db, user_id,
@@ -444,8 +567,9 @@ async def _process_pairs(
                             f"({len(open_positions)+1}/{max_pos})",
                             symbol=symbol,
                         )
-                    new_pos = await _open_new_position(user_id, okx, pc, symbol, ws_price)
+                    new_pos = await _open_new_position(user_id, okx, pc, symbol, ws_price, double_first)
                     if new_pos:
+                        _last_entry_time[user_id] = time.time()
                         open_positions[symbol] = new_pos
         except asyncio.CancelledError:
             raise
@@ -461,8 +585,9 @@ async def _open_new_position(
     pair_cfg,  # PairConfig or SimpleNamespace fallback
     symbol: str,
     current_price: float,
+    double_first: bool = True,
 ) -> Position | None:
-    amount_usdt = pair_cfg.first_order_amount
+    amount_usdt = pair_cfg.first_order_amount * (2 if double_first else 1)
     try:
         order = await okx.create_market_buy_order(symbol, amount_usdt, hint_price=current_price)
         hint_qty = amount_usdt / current_price * (1 - FEE_RATE)
@@ -510,6 +635,7 @@ async def _manage_position(
     pair_cfg,
     pos: Position,
     current_price: float,
+    open_positions: dict[str, Position],
     rsi_val: float | None = None,
 ):
     # Skip if a manual operation is in progress for this symbol
@@ -532,86 +658,118 @@ async def _manage_position(
                             lot_sz=getattr(pair_cfg, "lot_sz", None))
         return
 
-    # RSI 超买立即止盈：当 RSI >= 有效超买点 且价格高于均价 1%，直接卖出，不等追踪止盈
-    # 有效超买点随马丁层级梯度降低：每深一层降低 2，补仓越多越早出场
-    # L0=base, L1=base-2, L2=base-4, ..., 最低不低于 50
-    rsi_overbought_base = getattr(strategy, "rsi_overbought", 70.0) or 70.0
-    rsi_step = getattr(strategy, "overbought_rsi_step", None) or 2.0
-    profit_step = getattr(strategy, "overbought_profit_step", None) or 0.1
-    effective_overbought = max(50.0, rsi_overbought_base - rsi_step * pos.martin_level)
-    overbought_min_profit_base = getattr(strategy, "overbought_min_profit_pct", None) or 1.0
-    overbought_min_profit = max(0.3, overbought_min_profit_base - profit_step * pos.martin_level)
-    if rsi_val is not None and rsi_val >= effective_overbought and unrealised_pct >= overbought_min_profit:
-        with SessionLocal() as db2:
-            _db_log(
-                db2, user_id,
-                f"RSI={rsi_val:.1f} >= {effective_overbought} (overbought L{pos.martin_level}) & profit={unrealised_pct:.2f}% >= {overbought_min_profit}% — immediate sell",
-                symbol=pos.symbol,
-            )
-        await _execute_sell(db, user_id, okx, pos, current_price, "overbought_sell",
-                            lot_sz=getattr(pair_cfg, "lot_sz", None))
-        return
+    # ── 止盈出场 ─────────────────────────────────────────────────────────────
 
-    if pos.trailing_active:
-        if current_price > pos.peak_price:
-            pos.peak_price = current_price
-            db.commit()
+    # 路径A：利润驱动追踪止盈（与 RSI 无关）
+    # 净利润 >= take_profit_pct → 激活追踪，记录/更新峰值价
+    # 激活后从峰值回撤 >= trailing_stop_pct → 卖出
+    take_profit_pct  = getattr(pair_cfg, "take_profit_pct",  1.3) or 1.3
+    trailing_stop_pct = getattr(pair_cfg, "trailing_stop_pct", 0.3) or 0.3
 
-        drawdown_from_peak = (pos.peak_price - current_price) / pos.peak_price * 100
-        if drawdown_from_peak >= pair_cfg.trailing_stop_pct:
-            await _execute_sell(db, user_id, okx, pos, current_price, "trailing_stop",
-                                lot_sz=getattr(pair_cfg, "lot_sz", None))
-            return
-    else:
-        if unrealised_pct >= pair_cfg.take_profit_pct:
+    if unrealised_pct >= take_profit_pct:
+        if not pos.trailing_active:
             pos.trailing_active = True
             pos.peak_price = current_price
             db.commit()
             with SessionLocal() as db2:
+                _db_log(db2, user_id,
+                    f"追踪止盈激活: profit={unrealised_pct:.2f}% >= {take_profit_pct}%, peak={current_price}",
+                    symbol=pos.symbol)
+        else:
+            if current_price > pos.peak_price:
+                pos.peak_price = current_price
+                db.commit()
+
+    if pos.trailing_active:
+        drawdown_pct = (pos.peak_price - current_price) / pos.peak_price * 100
+        if drawdown_pct >= trailing_stop_pct:
+            with SessionLocal() as db2:
+                _db_log(db2, user_id,
+                    f"追踪止盈触发: 从峰值回撤={drawdown_pct:.2f}% >= {trailing_stop_pct}%, "
+                    f"peak={pos.peak_price}, current={current_price}, profit={unrealised_pct:.2f}%",
+                    symbol=pos.symbol)
+            await _execute_sell(db, user_id, okx, pos, current_price, "trailing_stop",
+                                lot_sz=getattr(pair_cfg, "lot_sz", None))
+            return
+
+    # 路径B：RSI 超买止盈
+    # 阈值随马丁层级梯度降低（L0=70, L1=68, ...最低50），利润门槛随 RSI 强度线性递减
+    rsi_overbought_base = getattr(strategy, "rsi_overbought", 70.0) or 70.0
+    rsi_step = getattr(strategy, "overbought_rsi_step", None) or 2.0
+    effective_overbought = max(50.0, rsi_overbought_base - rsi_step * pos.martin_level)
+    overbought_min_profit = getattr(strategy, "overbought_min_profit_pct", None) or 1.0
+
+    # 路径C：低余额强制止盈（余额紧张时只要达到低余额专用最低利润即立刻出场）
+    low_balance_pct = getattr(strategy, "low_balance_pct", 0.0) or 0.0
+    low_balance_min_profit = getattr(strategy, "low_balance_min_profit_pct", 0.6) or 0.6
+    if _is_low_balance(user_id, low_balance_pct) and unrealised_pct >= low_balance_min_profit:
+        with SessionLocal() as db2:
+            _db_log(
+                db2, user_id,
+                f"低余额强制止盈: 剩余余额<{low_balance_pct}%, profit={unrealised_pct:.2f}% >= {low_balance_min_profit}% — 强制卖出",
+                level="WARNING", symbol=pos.symbol,
+            )
+        await _execute_sell(db, user_id, okx, pos, current_price, "low_balance_sell",
+                            lot_sz=getattr(pair_cfg, "lot_sz", None))
+        return
+
+    # 常规 RSI 超买止盈（利润门槛随 RSI 强度线性递减）
+    # RSI 刚过阈值 → 要求完整利润 overbought_min_profit
+    # RSI 达到 overbought_rsi_max → 要求降至 overbought_profit_floor
+    # 中间线性插值：RSI 越强越积极出场
+    if rsi_val is not None and rsi_val >= effective_overbought:
+        rsi_max = getattr(strategy, "overbought_rsi_max", 85.0) or 85.0
+        profit_floor = getattr(strategy, "overbought_profit_floor_pct", 0.5) or 0.5
+        max_excess = max(rsi_max - effective_overbought, 1.0)
+        ratio = min(1.0, (rsi_val - effective_overbought) / max_excess)
+        required_profit = overbought_min_profit - ratio * (overbought_min_profit - profit_floor)
+        if unrealised_pct >= required_profit:
+            with SessionLocal() as db2:
                 _db_log(
                     db2, user_id,
-                    f"Trailing stop activated at {current_price} (profit {unrealised_pct:.2f}%)",
+                    f"RSI={rsi_val:.1f} >= {effective_overbought:.1f} (L{pos.martin_level}) "
+                    f"& profit={unrealised_pct:.2f}% >= {required_profit:.2f}% (动态门槛) — sell",
                     symbol=pos.symbol,
                 )
+            await _execute_sell(db, user_id, okx, pos, current_price, "overbought_sell",
+                                lot_sz=getattr(pair_cfg, "lot_sz", None))
             return
 
     # ── Check Martingale grid buys ─────────────────────────────────────────────
-    # 补仓冷却：两次补仓之间必须间隔至少 martin_cooldown_seconds 秒
+    # 暂停补仓：用户手动冻结该交易对的马丁加仓
+    if getattr(pair_cfg, "pause_martin", False):
+        return
+
+    # 补仓冷却：低余额时两次补仓之间必须间隔至少 martin_cooldown_seconds 秒
     martin_cooldown = getattr(strategy, "martin_cooldown_seconds", 0) or 0
     if martin_cooldown > 0 and pos.last_martin_at:
         elapsed = (datetime.utcnow() - pos.last_martin_at).total_seconds()
         if elapsed < martin_cooldown:
             return  # 冷却期内跳过补仓
 
-    # Replenishment retracement logic (matches btc project):
-    #   - retrace_pct = 0 : buy immediately when price drops >= threshold
-    #   - retrace_pct > 0 : track the trough (lowest point after threshold crossed),
-    #                        buy only when price bounces retrace_pct% from trough
+    # ── 马丁补仓：跌幅达标 + RSI 超卖双重确认 ───────────────────────────────────
+    # 仅当价格从上次买入跌幅 >= 网格阈值，且 RSI 同时处于超卖区时才补仓，
+    # 避免在反弹途中或强势下跌初期盲目加仓
     grid_drops = pair_cfg.grid_drops or [1.0, 2.0, 3.0, 4.0, 5.0]
     if pos.martin_level < pair_cfg.max_martin_levels:
         drop_threshold = grid_drops[pos.martin_level] if pos.martin_level < len(grid_drops) else grid_drops[-1]
         drop_from_last = (pos.last_buy_price - current_price) / pos.last_buy_price * 100
-        retrace_pct = pair_cfg.replenishment_retracement_pct or 0.0
 
         if drop_from_last >= drop_threshold:
-            if retrace_pct <= 0:
-                do_buy = True
-            else:
-                # Track trough: update martin_trigger_price to the lowest price seen
-                if pos.martin_trigger_price is None or current_price < pos.martin_trigger_price:
-                    pos.martin_trigger_price = current_price
-                    db.commit()
-                # Buy when price bounces retrace_pct% from the trough
-                bounce_needed = pos.martin_trigger_price * (1 + retrace_pct / 100.0)
-                do_buy = current_price >= bounce_needed
-            if do_buy:
+            rsi_oversold = getattr(strategy, "rsi_oversold", 30.0) or 30.0
+            if rsi_val is not None and rsi_val > 0 and rsi_val <= rsi_oversold:
                 next_level = pos.martin_level + 1
                 amount_usdt = pair_cfg.first_order_amount * (pair_cfg.martin_multiplier ** next_level)
+                max_total_exposure = getattr(strategy, "max_total_exposure_usdt", 0.0) or 0.0
+                if max_total_exposure > 0:
+                    projected_exposure = _total_open_invested(open_positions) + amount_usdt
+                    if projected_exposure > max_total_exposure:
+                        logger.info(
+                            f"[Bot {user_id}] {pos.symbol} Martin L{next_level} skipped: projected exposure "
+                            f"{projected_exposure:.2f} > max_total_exposure_usdt={max_total_exposure:.2f}"
+                        )
+                        return
                 await _execute_martin_buy(db, user_id, okx, pos, current_price, next_level, amount_usdt)
-        else:
-            if pos.martin_trigger_price is not None:
-                pos.martin_trigger_price = None
-                db.commit()
 
 
 async def _execute_martin_buy(
@@ -635,7 +793,6 @@ async def _execute_martin_buy(
             logger.warning(f"[Bot {user_id}] {pos.symbol} Martin L{next_level} accFillSz unavailable, using estimated qty={qty:.8f}")
         order_id = str(order.get("id", ""))
         _add_martin_buy(db, pos, fill_price, amount_usdt, qty, next_level, order_id)
-        pos.martin_trigger_price = None
         pos.last_martin_at = datetime.utcnow()
         db.commit()
         _db_log(
@@ -811,6 +968,25 @@ async def manual_buy(user_id: int, position_id: int, amount_usdt: float) -> dict
             raise RuntimeError("Position not found or already closed")
         symbol = pos.symbol
         next_level = pos.martin_level + 1
+        strategy = db.query(StrategyConfig).filter_by(user_id=user_id).first()
+        open_positions = _open_positions_by_symbol(db, user_id)
+        pair_cfg_map = {pc.symbol: pc for pc in db.query(PairConfig).filter_by(user_id=user_id).all()}
+        max_total_exposure = getattr(strategy, "max_total_exposure_usdt", 0.0) or 0.0
+        if max_total_exposure > 0:
+            projected_exposure = _total_open_invested(open_positions) + amount_usdt
+            if projected_exposure > max_total_exposure:
+                raise RuntimeError(
+                    f"Manual buy blocked: projected exposure {projected_exposure:.2f} "
+                    f"> max_total_exposure_usdt={max_total_exposure:.2f}"
+                )
+        max_total_committed = getattr(strategy, "max_total_committed_usdt", 0.0) or 0.0
+        if max_total_committed > 0:
+            projected_committed = _total_committed_exposure(open_positions, pair_cfg_map, strategy) + amount_usdt
+            if projected_committed > max_total_committed:
+                raise RuntimeError(
+                    f"Manual buy blocked: projected committed exposure {projected_committed:.2f} "
+                    f"> max_total_committed_usdt={max_total_committed:.2f}"
+                )
 
     okx = _build_okx_client(user_id)
     if not okx:
@@ -829,7 +1005,7 @@ async def manual_buy(user_id: int, position_id: int, amount_usdt: float) -> dict
             if not pos:
                 raise RuntimeError("Position disappeared during buy")
             _add_martin_buy(db, pos, fill_price, amount_usdt, qty, next_level, order_id)
-            # Reset trailing stop so it recalculates from the new (lower) avg_price
+            # 补仓后重置追踪止盈，从新均价重新计算盈利阈值
             pos.trailing_active = False
             pos.peak_price = pos.avg_price
             db.commit()

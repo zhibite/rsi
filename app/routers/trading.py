@@ -132,6 +132,20 @@ def update_strategy(
     return cfg
 
 
+@router.put("/strategy/pause-entries")
+def toggle_pause_entries(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Toggle pause_new_entries flag for the current user's strategy."""
+    cfg = db.query(StrategyConfig).filter_by(user_id=current_user.id).first()
+    if not cfg:
+        raise HTTPException(404, "Strategy config not found")
+    cfg.pause_new_entries = not cfg.pause_new_entries
+    db.commit()
+    return {"pause_new_entries": cfg.pause_new_entries}
+
+
 # ── Pair Config CRUD ───────────────────────────────────────────────────────────
 
 @router.get("/pairs", response_model=List[PairConfigOut])
