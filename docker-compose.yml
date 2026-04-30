@@ -1,0 +1,38 @@
+services:
+  rsi-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rsi-bot
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=8000
+    volumes:
+      # Persist SQLite database and ENCRYPTION_KEY across restarts
+      - ./data:/app/data
+    # Required for SQLite under Docker:
+    # DATABASE_URL should use a path INSIDE the container.
+    # If using an external DB (PostgreSQL/MySQL), remove the volumes section above
+    # and update DATABASE_URL in .env accordingly.
+
+  # Optional: production-grade database (uncomment to use PostgreSQL)
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: rsi-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: rsibot
+  #     POSTGRES_PASSWORD: CHANGE_ME_IN_PROD
+  #     POSTGRES_DB: rsibot
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+
+volumes:
+  # postgres_data:

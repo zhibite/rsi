@@ -21,8 +21,6 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = ""
     # Set to false in .env to close public registration
     ALLOW_REGISTER: bool = True
-    # true = Vue SPA (frontend/dist/)；false = 旧版静态 HTML (static/)
-    USE_VUE_FRONTEND: bool = True
 
     class Config:
         env_file = ".env"
@@ -41,12 +39,15 @@ def get_fernet() -> Fernet:
 
     key = settings.ENCRYPTION_KEY
     if not key:
-        # Generate and persist key
         key = Fernet.generate_key().decode()
-        env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
-        with open(env_path, "a") as f:
-            f.write(f'\nENCRYPTION_KEY="{key}"\n')
         settings.ENCRYPTION_KEY = key
+        # Try to persist to .env if writable (works in dev; in Docker, set via env var instead)
+        try:
+            env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+            with open(env_path, "a") as f:
+                f.write(f'\nENCRYPTION_KEY="{key}"\n')
+        except (IOError, OSError):
+            pass
 
     _fernet_instance = Fernet(key.encode() if isinstance(key, str) else key)
     return _fernet_instance

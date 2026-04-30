@@ -16,10 +16,6 @@ __pycache__/
 build/
 .eggs/
 
-# 前端依赖（不提交）
-frontend/node_modules/
-# 保留 frontend/dist/（FastAPI 托管需要）
-
 # 虚拟环境
 venv/
 .venv/
@@ -30,6 +26,10 @@ env/
 .idea/
 *.swp
 *.swo
+
+# Docker
+data/          # SQLite DB persistence (created by docker-deploy.sh)
+.dockerignore
 
 # 日志
 *.log
