@@ -6,12 +6,12 @@ services:
     container_name: rsi-bot
     restart: unless-stopped
     ports:
-      - "${WEB_PORT:-8000}:8000"
+      - "${WEB_PORT:-8001}:8001"
     env_file:
       - .env
     environment:
       - WEB_HOST=0.0.0.0
-      - WEB_PORT=8000
+      - WEB_PORT=8001
     volumes:
       # Persist SQLite database and ENCRYPTION_KEY across restarts
       - ./data:/app/data
